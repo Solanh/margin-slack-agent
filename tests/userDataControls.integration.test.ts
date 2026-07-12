@@ -158,14 +158,21 @@ describeDatabase("user data controls", () => {
   it("deletes only data older than the configured retention cutoff", async () => {
     const workspaceId = `T-${randomUUID()}`;
     const owner = { workspaceId, userId: "U-owner" };
+    const cleanupNow = new Date(Date.now() + 60_000);
+    const oldStartsAt = new Date(
+      cleanupNow.getTime() - 60 * 24 * 60 * 60 * 1000,
+    );
+    const recentCreatedAt = new Date(
+      cleanupNow.getTime() - 2 * 24 * 60 * 60 * 1000,
+    );
     const oldMeeting = await meetings.save({
       ...owner,
       provider: "explicit",
       providerEventId: null,
       seriesKey: null,
       title: "Old meeting",
-      startsAt: new Date("2026-05-01T18:00:00.000Z"),
-      endsAt: new Date("2026-05-01T18:30:00.000Z"),
+      startsAt: oldStartsAt,
+      endsAt: new Date(oldStartsAt.getTime() + 30 * 60 * 1000),
       participants: [],
       confidence: "exact",
     });
@@ -190,25 +197,19 @@ describeDatabase("user data controls", () => {
     });
     await pool.query(
       "UPDATE notes SET created_at = $2 WHERE id = $1",
-      [oldNote.id, new Date("2026-05-01T18:10:00.000Z")],
+      [oldNote.id, oldStartsAt],
     );
     await pool.query(
       "UPDATE notes SET created_at = $2 WHERE id = $1",
-      [recentNote.id, new Date("2026-07-10T18:10:00.000Z")],
+      [recentNote.id, recentCreatedAt],
     );
     await userData.setRetentionDays(owner, 30);
 
-    const jobs = await userData.claimRetentionJobs(
-      new Date("2026-07-12T20:00:00.000Z"),
-      10,
-    );
+    const jobs = await userData.claimRetentionJobs(cleanupNow, 10);
     expect(jobs).toEqual([
       expect.objectContaining({ ...owner, retentionDays: 30 }),
     ]);
-    const cleanup = await userData.applyRetention(
-      jobs[0]!,
-      new Date("2026-07-12T20:00:00.000Z"),
-    );
+    const cleanup = await userData.applyRetention(jobs[0]!, cleanupNow);
 
     expect(cleanup).toEqual({ deletedNotes: 1, deletedMeetings: 1 });
     await expect(notes.getById(owner, oldNote.id)).resolves.toBeNull();
