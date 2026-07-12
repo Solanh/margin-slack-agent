@@ -381,8 +381,8 @@ export class PostgresUserDataRepository implements UserDataRepository {
         `
           UPDATE retention_cleanup_jobs
           SET status = 'pending',
-              next_run_at = $3 + INTERVAL '24 hours',
-              last_completed_at = $3,
+              next_run_at = $3::timestamptz + INTERVAL '24 hours',
+              last_completed_at = $3::timestamptz,
               locked_at = NULL,
               attempts = 0,
               last_error_code = NULL
