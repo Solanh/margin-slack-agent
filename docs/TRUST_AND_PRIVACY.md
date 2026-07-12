@@ -10,17 +10,18 @@ Margin promises:
 2. It stores only what the user deliberately sends plus narrowly authorized meeting metadata.
 3. It preserves the original exactly.
 4. It labels AI-generated text as organized/derived.
-5. It does not invent speakers, owners, dates, participants, or decisions.
+5. It does not invent speakers, owners, dates, participants, titles, or decisions.
 6. It asks when context is ambiguous.
 7. It keeps notes private unless the user explicitly shares them.
 8. Calendar access is optional and revocable.
+9. Slack huddle and active-view signals are short-lived and optional.
 
 ## Provenance labels
 
 Every value has a source classification:
 
 - **User-provided:** appears directly in the note or a user action.
-- **Verified context:** supplied by Slack or Calendar.
+- **Verified context:** supplied by a documented Slack or Calendar signal.
 - **Inferred:** produced by the model or heuristic.
 - **Unresolved:** insufficient evidence.
 
@@ -41,7 +42,7 @@ Instead:
 
 ## Data minimization
 
-Default inputs to the model:
+Default model inputs:
 
 - the note;
 - a selected verified meeting title and start/end time;
@@ -51,14 +52,17 @@ Default inputs to the model:
 
 Do not send:
 
-- full huddle audio or transcript;
+- huddle audio or transcript;
 - unrelated channel history;
+- active-view message bodies;
 - participant messages;
 - Calendar descriptions;
 - attendee email identifiers;
 - event location, conferencing details, attachments, or reminders.
 
-Google Calendar API requests use a partial-response field list and do not retrieve descriptions, locations, conference links, or attachments. Limited attendee email identifiers are normalized and stored only for future deterministic context matching; they are not passed to the transformation model.
+Google Calendar requests use a partial-response field list. Limited attendee email identifiers are stored only for deterministic matching and are not passed to the model.
+
+Slack active-view context stores only a channel ID and optional message timestamp. Margin does not fetch the corresponding name, message text, thread, or history. Huddle state stores only active state, optional opaque call ID, and observation/expiration timestamps.
 
 ## Google OAuth controls
 
@@ -69,9 +73,25 @@ Google Calendar API requests use a partial-response field list and do not retrie
 - access and refresh tokens are encrypted with AES-256-GCM;
 - expired access tokens are refreshed only through the stored refresh token;
 - disconnect attempts Google revocation and always removes local credentials;
-- OAuth callback responses are marked `no-store` and use restrictive browser headers.
+- callback responses use `no-store` and restrictive browser headers.
 
-Calendar is not a prerequisite for note capture. A missing connection, authorization failure, token failure, or Calendar API outage produces a standalone note.
+Calendar is not a prerequisite for note capture.
+
+## Slack signal controls
+
+- `user_huddle_changed` is retained only for workspace users already known to Margin;
+- first-use capture stores the raw note before refreshing that user's profile;
+- leaving a huddle deletes the active row;
+- stale huddle state expires, with bounded fallback and maximum lifetimes;
+- active-view context expires after 15 minutes;
+- unsupported canvas/list context is discarded;
+- cross-workspace entities are ignored;
+- active-view context is never treated as proof of a huddle channel;
+- no `calls:read` scope is requested;
+- `calls.info` is not used for undocumented native huddle IDs;
+- missing or failed Slack metadata never blocks note capture.
+
+A huddle record uses `Slack huddle (title unavailable)` and an empty participant list because Slack's supported state signal does not provide verified title or participant metadata.
 
 ## Privacy defaults
 
@@ -80,6 +100,7 @@ Calendar is not a prerequisite for note capture. A missing connection, authoriza
 - reminders delivered privately;
 - App Home scoped to the current user;
 - Calendar disconnected by default;
+- no audio, transcript, or unrelated history access;
 - configurable retention;
 - deletion removes derived content, embeddings, and reminders associated with the note.
 
@@ -87,9 +108,9 @@ Calendar is not a prerequisite for note capture. A missing connection, authoriza
 
 ### Hallucinated attribution
 
-Risk: model interprets “Maya said…” incorrectly.
+Risk: the model interprets “Maya said…” incorrectly.
 
-Control: only extract a speaker when the raw note explicitly contains the attribution. Label it user-provided, not verified.
+Control: extract a speaker only when the raw note explicitly contains the attribution. Label it user-provided, not verified.
 
 ### Accidental shared posting
 
@@ -101,25 +122,37 @@ Control: capture, stored card references, and interaction updates require Slack 
 
 Risk: overlapping events cause the wrong context.
 
-Control: retain every plausible event candidate. Auto-attach only when there is exactly one candidate. Multiple candidates remain unresolved for user selection.
+Control: retain every plausible event candidate. Auto-attach only when exactly one candidate exists. Multiple candidates remain unresolved.
+
+### Huddle metadata overclaim
+
+Risk: an opaque call ID or active-view channel is interpreted as a verified title, channel, or participant list.
+
+Control: store signals separately, use an explicit title-unavailable label, retain no participants, and never use active-view context as proof of huddle location.
+
+### Workspace-wide event overcollection
+
+Risk: `user_huddle_changed` causes Margin to retain activity for users who never used the app.
+
+Control: discard events unless the workspace/user already owns a Margin note or connected integration.
 
 ### OAuth login CSRF or replay
 
 Risk: a callback is associated with the wrong user or replayed.
 
-Control: server-generated cryptographic state is stored as a hash, expires quickly, resolves ownership server-side, and is consumed atomically once.
+Control: cryptographic state is hashed, expires quickly, resolves ownership server-side, and is consumed atomically once.
 
 ### Prompt injection in note text
 
-Risk: note contains instructions aimed at the model.
+Risk: note text contains instructions aimed at the model.
 
-Control: treat note text as data, enforce schema, ignore tool-use directives, and do not grant the transformation model external tools.
+Control: treat note text as data, enforce schema, ignore tool directives, and give the transformation model no external tools.
 
 ### Sensitive content leakage in logs
 
-Risk: raw notes, tokens, authorization codes, or Calendar details are written to observability systems.
+Risk: raw notes, tokens, authorization codes, Calendar details, or Slack context are written to observability systems.
 
-Control: log identifiers and failure categories, not note bodies or credential material.
+Control: log identifiers and failure categories, not note bodies, credentials, context content, or event payloads.
 
 ## User controls
 
