@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Note } from "../src/domain/note.js";
 import { handlePrivateNoteMessage } from "../src/slack/listeners.js";
 
+const noteId = "11111111-1111-4111-8111-111111111111";
 const message = {
   channel: "D123",
   user: "U123",
@@ -8,19 +10,52 @@ const message = {
   ts: "123.456",
 };
 
+function completeNote(overrides: Partial<Note> = {}): Note {
+  return {
+    id: noteId,
+    workspaceId: "T123",
+    userId: "U123",
+    sourceChannelId: "D123",
+    sourceMessageTs: "123.456",
+    rawText: message.text,
+    organizedText: "Remember the exact thing.",
+    noteType: "reference",
+    priority: "normal",
+    status: "open",
+    displayMode: "organized",
+    meetingId: null,
+    contextConfidence: "unresolved",
+    reminderIntent: null,
+    explicitDueAt: null,
+    inferredFields: ["organizedText", "noteType", "priority"],
+    uncertainties: [],
+    transformationVersion: "margin-note-v1",
+    cardChannelId: "D123",
+    cardMessageTs: "999.000",
+    createdAt: new Date("2026-07-12T18:00:00.000Z"),
+    updatedAt: new Date("2026-07-12T18:00:01.000Z"),
+    ...overrides,
+  };
+}
+
 describe("handlePrivateNoteMessage", () => {
-  it("sends success only after durable capture resolves", async () => {
+  it("posts one processing card and updates that same card after organization", async () => {
     const order: string[] = [];
+    const post = vi.fn(async () => {
+      order.push("post");
+      return { channel: "D123", ts: "999.000" };
+    });
+    const update = vi.fn(async () => {
+      order.push("update");
+    });
 
     await handlePrivateNoteMessage({
       workspaceId: "T123",
       message,
       capture: async () => {
-        order.push("capture-start");
-        await Promise.resolve();
-        order.push("capture-finished");
+        order.push("capture");
         return {
-          id: "note-1",
+          id: noteId,
           workspaceId: "T123",
           userId: "U123",
           sourceChannelId: "D123",
@@ -29,18 +64,56 @@ describe("handlePrivateNoteMessage", () => {
           createdAt: new Date("2026-07-12T18:00:00.000Z"),
         };
       },
-      reply: async (response) => {
-        order.push("reply");
-        expect(response.text).toContain("saved your note");
+      recordCardReference: async () => {
+        order.push("record-card");
+        return completeNote({ organizedText: null, noteType: null });
       },
+      resolveTimeZone: async () => "America/New_York",
+      organize: async () => {
+        order.push("organize");
+        return {
+          status: "organized",
+          note: completeNote(),
+          transformation: {
+            organizedText: "Remember the exact thing.",
+            noteType: "reference",
+            priority: "normal",
+            reminderIntent: null,
+            explicitDueAt: null,
+            inferredFields: ["organizedText", "noteType", "priority"],
+            uncertainties: [],
+          },
+        };
+      },
+      getCardData: async () => {
+        order.push("load-card");
+        return { note: completeNote(), meeting: null };
+      },
+      post,
+      update,
       logError: vi.fn(),
     });
 
-    expect(order).toEqual(["capture-start", "capture-finished", "reply"]);
+    expect(order).toEqual([
+      "capture",
+      "post",
+      "record-card",
+      "organize",
+      "load-card",
+      "update",
+    ]);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "D123",
+        ts: "999.000",
+      }),
+    );
   });
 
-  it("reports a visible failure without claiming success", async () => {
-    const replies: string[] = [];
+  it("reports a visible persistence failure without organizing", async () => {
+    const posts: string[] = [];
+    const organize = vi.fn();
     const logError = vi.fn();
 
     await handlePrivateNoteMessage({
@@ -49,13 +122,20 @@ describe("handlePrivateNoteMessage", () => {
       capture: async () => {
         throw new Error("database unavailable");
       },
-      reply: async (response) => {
-        replies.push(response.text);
+      recordCardReference: vi.fn(),
+      resolveTimeZone: async () => "UTC",
+      organize,
+      getCardData: vi.fn(),
+      post: async (response) => {
+        posts.push(response.text);
+        return { channel: "D123", ts: "999.000" };
       },
+      update: vi.fn(),
       logError,
     });
 
-    expect(replies).toEqual(["Margin could not save this note."]);
+    expect(posts).toEqual(["Margin could not save this note."]);
+    expect(organize).not.toHaveBeenCalled();
     expect(logError).toHaveBeenCalledWith(
       "Unable to persist raw note",
       expect.any(Error),
@@ -63,9 +143,9 @@ describe("handlePrivateNoteMessage", () => {
     expect(JSON.stringify(logError.mock.calls)).not.toContain(message.text);
   });
 
-  it("does not retry persistence when only the Slack reply fails", async () => {
+  it("does not duplicate the note when the processing card cannot be posted", async () => {
     const capture = vi.fn(async () => ({
-      id: "note-1",
+      id: noteId,
       workspaceId: "T123",
       userId: "U123",
       sourceChannelId: "D123",
@@ -73,21 +153,34 @@ describe("handlePrivateNoteMessage", () => {
       rawText: message.text,
       createdAt: new Date("2026-07-12T18:00:00.000Z"),
     }));
+    const organize = vi.fn(async () => ({
+      status: "verbatim" as const,
+      note: completeNote({ organizedText: null, noteType: null }),
+      reason: "provider_failure" as const,
+    }));
+    const update = vi.fn();
     const logError = vi.fn();
 
     await handlePrivateNoteMessage({
       workspaceId: "T123",
       message,
       capture,
-      reply: async () => {
+      recordCardReference: vi.fn(),
+      resolveTimeZone: async () => "UTC",
+      organize,
+      getCardData: vi.fn(),
+      post: async () => {
         throw new Error("Slack unavailable");
       },
+      update,
       logError,
     });
 
     expect(capture).toHaveBeenCalledTimes(1);
+    expect(organize).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
     expect(logError).toHaveBeenCalledWith(
-      "Raw note saved, but acknowledgement failed",
+      "Raw note saved, but processing card could not be posted",
       expect.any(Error),
     );
   });
