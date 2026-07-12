@@ -52,20 +52,23 @@ Margin does **not** record audio, transcribe meetings, summarize entire channels
 
 ## Repository status
 
-Issue #1 now provides a Slack Bolt application shell with:
+Issues #1 and #2 provide the first complete capture path:
 
-- the current Slack `agent_view` manifest;
-- a writable Messages tab and App Home;
+- current Slack `agent_view` manifest;
+- writable Messages tab and App Home;
 - private `message.im` handling;
-- `app_home_opened` and `app_context_changed` listeners;
-- a Block Kit capture acknowledgement;
-- Socket Mode startup and strict environment validation.
+- Socket Mode startup;
+- PostgreSQL migration runner;
+- atomic, idempotent raw-note persistence;
+- success acknowledgement only after the database write resolves;
+- explicit visible failure when persistence fails;
+- tests for message filtering, exact-text preservation, capture ordering, and idempotent SQL.
 
-The acknowledgement explicitly states that storage is not active. Durable, idempotent capture is implemented in issue #2.
+Meeting context and AI organization are deliberately not enabled yet.
 
-## Run the Slack shell
+## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md) for app creation, token configuration, and verification.
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md) and [PostgreSQL setup](docs/DATABASE_SETUP.md).
 
 ```bash
 cp .env.example .env
@@ -73,12 +76,14 @@ npm install
 npm run typecheck
 npm test
 npm run build
+npm run migrate
 npm start
 ```
 
 ## Documentation
 
 - [Slack developer sandbox setup](docs/SLACK_SETUP.md)
+- [PostgreSQL setup](docs/DATABASE_SETUP.md)
 - [Product specification](docs/PRODUCT_SPEC.md)
 - [Market and competitive research](docs/MARKET_VALIDATION.md)
 - [User flows](docs/USER_FLOWS.md)

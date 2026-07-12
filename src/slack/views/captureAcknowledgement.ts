@@ -4,14 +4,14 @@ export function buildCaptureAcknowledgement() {
       type: "header" as const,
       text: {
         type: "plain_text" as const,
-        text: "Note received",
+        text: "Note saved",
       },
     },
     {
       type: "section" as const,
       text: {
         type: "mrkdwn" as const,
-        text: "Margin received your message through the private Agent View capture path.",
+        text: "Your exact message was saved privately before any enrichment step.",
       },
     },
     {
@@ -19,9 +19,28 @@ export function buildCaptureAcknowledgement() {
       elements: [
         {
           type: "mrkdwn" as const,
-          text: ":construction: This first implementation verifies Slack connectivity only. Durable storage and AI organization are not enabled yet.",
+          text: ":lock: Original preserved. Meeting context and AI organization are not enabled yet.",
         },
       ],
+    },
+  ];
+}
+
+export function buildCaptureFailureAcknowledgement() {
+  return [
+    {
+      type: "header" as const,
+      text: {
+        type: "plain_text" as const,
+        text: "Note not saved",
+      },
+    },
+    {
+      type: "section" as const,
+      text: {
+        type: "mrkdwn" as const,
+        text: "Margin could not persist this note. Your original message is still visible in Slack; copy it before retrying if it is important.",
+      },
     },
   ];
 }
