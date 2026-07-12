@@ -1,6 +1,5 @@
 import type {
   ContextCandidate,
-  ContextConfidenceSchema,
   ContextResolutionStatus,
   ContextSource,
   Note,
@@ -12,7 +11,7 @@ export interface ScoredContextCandidateInput {
   meetingId: string | null;
   source: ContextSource;
   score: number;
-  confidence: typeof ContextConfidenceSchema._output;
+  confidence: ContextCandidate["confidence"];
   signals: Record<string, unknown>;
 }
 
