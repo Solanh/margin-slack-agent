@@ -13,6 +13,23 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://margin:margin@localhost:5432/margin
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: margin
+          POSTGRES_PASSWORD: margin
+          POSTGRES_DB: margin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U margin -d margin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Check out repository
@@ -29,8 +46,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        run: npm test
-
       - name: Build
         run: npm run build
+
+      - name: Apply database migrations
+        run: npm run migrate
+
+      - name: Test
+        run: npm test
