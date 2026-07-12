@@ -27,18 +27,10 @@ interface MeetingRow extends QueryResultRow {
 
 const SAVE_WITH_PROVIDER_ID_SQL = `
   INSERT INTO meetings (
-    id,
-    workspace_id,
-    user_id,
-    provider,
-    provider_event_id,
-    title,
-    starts_at,
-    ends_at,
-    participants,
-    context_confidence
+    id, workspace_id, user_id, provider, provider_event_id, title,
+    starts_at, ends_at, participants, context_confidence, series_key
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
   ON CONFLICT (workspace_id, user_id, provider, provider_event_id)
     WHERE provider_event_id IS NOT NULL
   DO UPDATE SET
@@ -46,33 +38,24 @@ const SAVE_WITH_PROVIDER_ID_SQL = `
     starts_at = EXCLUDED.starts_at,
     ends_at = EXCLUDED.ends_at,
     participants = EXCLUDED.participants,
-    context_confidence = EXCLUDED.context_confidence
+    context_confidence = EXCLUDED.context_confidence,
+    series_key = COALESCE(EXCLUDED.series_key, meetings.series_key)
   RETURNING *
 `;
 
 const INSERT_EXPLICIT_SQL = `
   INSERT INTO meetings (
-    id,
-    workspace_id,
-    user_id,
-    provider,
-    provider_event_id,
-    title,
-    starts_at,
-    ends_at,
-    participants,
-    context_confidence
+    id, workspace_id, user_id, provider, provider_event_id, title,
+    starts_at, ends_at, participants, context_confidence, series_key
   )
-  VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8, $9)
+  VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8, $9, $10)
   RETURNING *
 `;
 
 const GET_SQL = `
   SELECT *
   FROM meetings
-  WHERE id = $1
-    AND workspace_id = $2
-    AND user_id = $3
+  WHERE id = $1 AND workspace_id = $2 AND user_id = $3
   LIMIT 1
 `;
 
@@ -106,6 +89,7 @@ export class PostgresMeetingRepository implements MeetingRepository {
           input.endsAt,
           JSON.stringify(input.participants),
           input.confidence,
+          input.seriesKey ?? null,
         ]
       : [
           randomUUID(),
@@ -117,18 +101,17 @@ export class PostgresMeetingRepository implements MeetingRepository {
           input.endsAt,
           JSON.stringify(input.participants),
           input.confidence,
+          input.seriesKey ?? null,
         ];
 
     const result = await this.pool.query<MeetingRow>(
       input.providerEventId ? SAVE_WITH_PROVIDER_ID_SQL : INSERT_EXPLICIT_SQL,
       values,
     );
-
     const row = result.rows[0];
     if (!row) {
       throw new Error("PostgreSQL did not return the saved meeting");
     }
-
     return this.mapRow(row);
   }
 
@@ -138,7 +121,6 @@ export class PostgresMeetingRepository implements MeetingRepository {
       owner.workspaceId,
       owner.userId,
     ]);
-
     const row = result.rows[0];
     return row ? this.mapRow(row) : null;
   }
@@ -154,7 +136,6 @@ export class PostgresMeetingRepository implements MeetingRepository {
       startsBefore,
       endsAfter,
     ]);
-
     return result.rows.map((row) => this.mapRow(row));
   }
 

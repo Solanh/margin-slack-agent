@@ -11,6 +11,7 @@ export interface SaveMeetingInput extends OwnerScope {
   endsAt: Date;
   participants: string[];
   confidence: MeetingContext["confidence"];
+  seriesKey?: string | null;
 }
 
 export interface MeetingRepository {

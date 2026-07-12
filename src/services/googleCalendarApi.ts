@@ -10,7 +10,10 @@ import {
 const GOOGLE_CALENDAR_EVENTS_ENDPOINT =
   "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
+const DEFAULT_UPCOMING_HORIZON_MS = 24 * 60 * 60 * 1000;
 const REFRESH_SKEW_MS = 60 * 1000;
+const EVENT_FIELDS =
+  "items(id,iCalUID,recurringEventId,summary,status,eventType,start(dateTime),end(dateTime),attendees(email,self,responseStatus),organizer(email,self))";
 
 const EventAttendeeSchema = z.object({
   email: z.string().optional(),
@@ -20,6 +23,8 @@ const EventAttendeeSchema = z.object({
 
 const CalendarEventSchema = z.object({
   id: z.string().min(1),
+  iCalUID: z.string().optional(),
+  recurringEventId: z.string().optional(),
   summary: z.string().optional(),
   status: z.string().optional(),
   eventType: z.string().optional(),
@@ -40,6 +45,7 @@ const EventsListResponseSchema = z.object({
 
 export interface GoogleCalendarEventCandidate {
   providerEventId: string;
+  seriesKey: string | null;
   title: string;
   startsAt: Date;
   endsAt: Date;
@@ -76,20 +82,38 @@ export class GoogleCalendarApiService {
       throw new Error("Calendar overlap tolerance must be non-negative");
     }
 
-    const accessToken = await this.getAccessToken(owner);
     const windowStart = new Date(capturedAt.getTime() - toleranceMs);
     const windowEnd = new Date(capturedAt.getTime() + toleranceMs);
+    return this.listEvents(owner, windowStart, windowEnd, 20);
+  }
+
+  async listUpcomingEvents(
+    owner: OwnerScope,
+    from: Date,
+    horizonMs = DEFAULT_UPCOMING_HORIZON_MS,
+  ): Promise<GoogleCalendarEventCandidate[]> {
+    if (!Number.isFinite(horizonMs) || horizonMs <= 0) {
+      throw new Error("Calendar upcoming horizon must be positive");
+    }
+    const until = new Date(from.getTime() + horizonMs);
+    return this.listEvents(owner, from, until, 50);
+  }
+
+  private async listEvents(
+    owner: OwnerScope,
+    windowStart: Date,
+    windowEnd: Date,
+    maxResults: number,
+  ): Promise<GoogleCalendarEventCandidate[]> {
+    const accessToken = await this.getAccessToken(owner);
     const url = new URL(GOOGLE_CALENDAR_EVENTS_ENDPOINT);
     url.searchParams.set("timeMin", windowStart.toISOString());
     url.searchParams.set("timeMax", windowEnd.toISOString());
     url.searchParams.set("singleEvents", "true");
     url.searchParams.set("orderBy", "startTime");
     url.searchParams.set("showDeleted", "false");
-    url.searchParams.set("maxResults", "20");
-    url.searchParams.set(
-      "fields",
-      "items(id,summary,status,eventType,start(dateTime),end(dateTime),attendees(email,self,responseStatus),organizer(email,self))",
-    );
+    url.searchParams.set("maxResults", String(maxResults));
+    url.searchParams.set("fields", EVENT_FIELDS);
 
     const response = await this.fetchImpl(url, {
       method: "GET",
@@ -172,7 +196,6 @@ export class GoogleCalendarApiService {
     }
 
     if (!event.start.dateTime || !event.end.dateTime) {
-      // All-day entries are not treated as active meeting candidates.
       return null;
     }
 
@@ -198,8 +221,10 @@ export class GoogleCalendarApiService {
       participants.add(event.organizer.email.trim().toLowerCase());
     }
 
+    const iCalUID = event.iCalUID?.trim();
     return {
       providerEventId: event.id,
+      seriesKey: iCalUID ? `google:${iCalUID}` : null,
       title:
         event.summary?.trim() || "Calendar event (title unavailable)",
       startsAt,

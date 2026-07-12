@@ -18,6 +18,7 @@ import { NoteCardService } from "./services/noteCard.js";
 import { OpenAITransformationModel } from "./services/openAITransformationModel.js";
 import { OrganizeNoteService } from "./services/organizeNote.js";
 import { PostMeetingDigestService } from "./services/postMeetingDigest.js";
+import { PreMeetingResurfacingService } from "./services/preMeetingResurfacing.js";
 import { SlackContextSignalService } from "./services/slackContextSignals.js";
 import { createSlackApp } from "./slack/app.js";
 import { createPostgresPool } from "./storage/postgres.js";
@@ -28,6 +29,7 @@ import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
 import { PostgresOAuthAuthorizationStateRepository } from "./storage/postgresOAuthAuthorizationStateRepository.js";
 import { PostgresOAuthConnectionRepository } from "./storage/postgresOAuthConnectionRepository.js";
 import { PostgresPostMeetingDigestRepository } from "./storage/postgresPostMeetingDigestRepository.js";
+import { PostgresPreMeetingResurfacingRepository } from "./storage/postgresPreMeetingResurfacingRepository.js";
 import { PostgresSlackContextSignalRepository } from "./storage/postgresSlackContextSignalRepository.js";
 import { PostgresTransformationRepository } from "./storage/postgresTransformationRepository.js";
 
@@ -52,6 +54,8 @@ const contextCandidateRepository = new PostgresContextCandidateRepository(
   noteRepository,
 );
 const postMeetingDigests = new PostgresPostMeetingDigestRepository(pool);
+const preMeetingResurfacings =
+  new PostgresPreMeetingResurfacingRepository(pool);
 const transformationRepository = new PostgresTransformationRepository(
   pool,
   noteRepository,
@@ -120,8 +124,15 @@ const app = createSlackApp(environment, {
   calendarConnections,
   slackContextSignals,
   postMeetingDigests,
+  preMeetingResurfacings,
 });
 const digestWorker = new PostMeetingDigestService(postMeetingDigests, app.client);
+const resurfacingWorker = new PreMeetingResurfacingService(
+  preMeetingResurfacings,
+  meetingRepository,
+  googleCalendar,
+  app.client,
+);
 
 async function start(): Promise<void> {
   await pool.query("SELECT 1");
@@ -129,13 +140,15 @@ async function start(): Promise<void> {
   await callbackServer.start();
   await app.start();
   digestWorker.start();
+  resurfacingWorker.start();
   console.log(
-    "Margin is connected to Slack, PostgreSQL, scored context resolution, post-meeting digests, note organization, and Google OAuth.",
+    "Margin is connected to Slack, PostgreSQL, scored context resolution, post-meeting digests, pre-meeting resurfacing, note organization, and Google OAuth.",
   );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
+  resurfacingWorker.stop();
   digestWorker.stop();
   await app.stop();
   await callbackServer.stop();
@@ -153,6 +166,7 @@ process.on("SIGTERM", () => {
 
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", error);
+  resurfacingWorker.stop();
   digestWorker.stop();
   await callbackServer.stop().catch(() => undefined);
   await pool.end();

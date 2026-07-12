@@ -98,6 +98,7 @@ export class ContextResolutionService {
         ...owner,
         provider: "google_calendar",
         providerEventId: event.providerEventId,
+        seriesKey: event.seriesKey,
         title: event.title,
         startsAt: event.startsAt,
         endsAt: event.endsAt,
