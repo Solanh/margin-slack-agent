@@ -1,6 +1,7 @@
 import { App, LogLevel } from "@slack/bolt";
 import type { Environment } from "../config.js";
 import { SafeStructuredLogger } from "../observability/safeLogger.js";
+import type { UserDataControlService } from "../services/userDataControls.js";
 import type { PostMeetingDigestRepository } from "../storage/postMeetingDigestRepository.js";
 import type { PreMeetingResurfacingRepository } from "../storage/preMeetingResurfacingRepository.js";
 import { registerCalendarActions } from "./calendarActions.js";
@@ -13,11 +14,13 @@ import {
   type SlackListenerDependencies,
 } from "./listeners.js";
 import { installSlackApiPolicy } from "./slackApiExecutor.js";
+import { registerUserDataActions } from "./userDataActions.js";
 
 export interface SlackApplicationDependencies
   extends SlackListenerDependencies {
   postMeetingDigests: PostMeetingDigestRepository;
   preMeetingResurfacings: PreMeetingResurfacingRepository;
+  userDataControls: UserDataControlService;
 }
 
 function toSlackLogLevel(level: Environment["LOG_LEVEL"]): LogLevel {
@@ -74,6 +77,11 @@ export function createSlackApp(
   registerPreMeetingResurfacingActions(
     app,
     dependencies.preMeetingResurfacings,
+  );
+  registerUserDataActions(
+    app,
+    dependencies.userDataControls,
+    dependencies.calendarConnections,
   );
 
   return app;
