@@ -73,20 +73,39 @@ const slackContextSignalRepository =
 const slackContextSignals = new SlackContextSignalService(
   slackContextSignalRepository,
 );
-const googleOAuthClient = new GoogleCalendarOAuthClient({
-  clientId: googleEnvironment.GOOGLE_CLIENT_ID,
-  clientSecret: googleEnvironment.GOOGLE_CLIENT_SECRET,
-  redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
-});
-const calendarConnections = new GoogleCalendarConnectionService(
-  oauthStateRepository,
-  oauthConnectionRepository,
-  googleOAuthClient,
-);
-const googleCalendar = new GoogleCalendarApiService(
-  oauthConnectionRepository,
-  googleOAuthClient,
-);
+
+let calendarConnections: GoogleCalendarConnectionService;
+let googleCalendar: GoogleCalendarApiService;
+let callbackServer: GoogleOAuthCallbackServer | null = null;
+
+if (googleEnvironment.enabled) {
+  const googleOAuthClient = new GoogleCalendarOAuthClient({
+    clientId: googleEnvironment.GOOGLE_CLIENT_ID,
+    clientSecret: googleEnvironment.GOOGLE_CLIENT_SECRET,
+    redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
+  });
+  calendarConnections = new GoogleCalendarConnectionService(
+    oauthStateRepository,
+    oauthConnectionRepository,
+    googleOAuthClient,
+  );
+  googleCalendar = new GoogleCalendarApiService(
+    oauthConnectionRepository,
+    googleOAuthClient,
+  );
+  callbackServer = new GoogleOAuthCallbackServer(
+    {
+      host: googleEnvironment.OAUTH_HTTP_HOST,
+      port: googleEnvironment.OAUTH_HTTP_PORT,
+      redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
+    },
+    calendarConnections,
+  );
+} else {
+  calendarConnections = GoogleCalendarConnectionService.disabled();
+  googleCalendar = GoogleCalendarApiService.disabled();
+}
+
 const contextResolver = new ContextResolutionService(
   noteRepository,
   meetingRepository,
@@ -94,15 +113,6 @@ const contextResolver = new ContextResolutionService(
   googleCalendar,
   slackContextSignals,
 );
-const callbackServer = new GoogleOAuthCallbackServer(
-  {
-    host: googleEnvironment.OAUTH_HTTP_HOST,
-    port: googleEnvironment.OAUTH_HTTP_PORT,
-    redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
-  },
-  calendarConnections,
-);
-
 const transformationModel = new OpenAITransformationModel(
   aiEnvironment.AI_API_KEY,
   aiEnvironment.AI_MODEL,
@@ -132,31 +142,39 @@ const app = createSlackApp(environment, {
   preMeetingResurfacings,
 });
 const digestWorker = new PostMeetingDigestService(postMeetingDigests, app.client);
-const resurfacingWorker = new PreMeetingResurfacingService(
-  preMeetingResurfacings,
-  meetingRepository,
-  googleCalendar,
-  app.client,
-);
+const resurfacingWorker = googleEnvironment.enabled
+  ? new PreMeetingResurfacingService(
+      preMeetingResurfacings,
+      meetingRepository,
+      googleCalendar,
+      app.client,
+    )
+  : null;
 
 async function start(): Promise<void> {
   await pool.query("SELECT 1");
   await slackContextSignals.deleteExpired();
-  await callbackServer.start();
+  if (callbackServer) {
+    await callbackServer.start();
+  }
   await app.start();
   digestWorker.start();
-  resurfacingWorker.start();
+  resurfacingWorker?.start();
   console.log(
-    "Margin is connected to Slack, PostgreSQL, private note retrieval, scored context resolution, post-meeting digests, pre-meeting resurfacing, note organization, and Google OAuth.",
+    googleEnvironment.enabled
+      ? "Margin is connected to Slack, PostgreSQL, private note retrieval, scored context resolution, post-meeting digests, pre-meeting resurfacing, note organization, and Google OAuth."
+      : "Margin is connected to Slack, PostgreSQL, private note retrieval, Slack context resolution, post-meeting digests, and note organization. Google Calendar integration is disabled.",
   );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
-  resurfacingWorker.stop();
+  resurfacingWorker?.stop();
   digestWorker.stop();
   await app.stop();
-  await callbackServer.stop();
+  if (callbackServer) {
+    await callbackServer.stop();
+  }
   await pool.end();
   process.exit(0);
 }
@@ -171,9 +189,11 @@ process.on("SIGTERM", () => {
 
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", error);
-  resurfacingWorker.stop();
+  resurfacingWorker?.stop();
   digestWorker.stop();
-  await callbackServer.stop().catch(() => undefined);
+  if (callbackServer) {
+    await callbackServer.stop().catch(() => undefined);
+  }
   await pool.end();
   process.exit(1);
 });
