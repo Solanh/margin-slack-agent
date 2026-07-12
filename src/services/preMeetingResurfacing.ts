@@ -1,5 +1,6 @@
 import type { WebClient } from "@slack/web-api";
 import type { OwnerScope } from "../domain/note.js";
+import { describeError } from "../observability/safeLogger.js";
 import type { MeetingRepository } from "../storage/meetingRepository.js";
 import type {
   PreMeetingResurfacing,
@@ -43,11 +44,11 @@ export class PreMeetingResurfacingService {
       return;
     }
     void this.runOnce().catch((error: unknown) => {
-      console.error("Pre-meeting resurfacing sweep failed", error);
+      console.error("Pre-meeting resurfacing sweep failed", describeError(error));
     });
     this.timer = setInterval(() => {
       void this.runOnce().catch((error: unknown) => {
-        console.error("Pre-meeting resurfacing sweep failed", error);
+        console.error("Pre-meeting resurfacing sweep failed", describeError(error));
       });
     }, this.intervalMs);
     this.timer.unref();
@@ -214,8 +215,6 @@ function retryDelayMs(attempts: number): number {
 }
 
 function safeErrorCode(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message.slice(0, 120).replace(/[^a-zA-Z0-9_.:-]/gu, "_");
-  }
-  return "unknown_resurfacing_delivery_error";
+  const descriptor = describeError(error);
+  return descriptor.code ?? `${descriptor.category}_${descriptor.name}`;
 }
