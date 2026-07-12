@@ -52,7 +52,7 @@ Margin does **not** record audio, transcribe meetings, summarize entire channels
 
 ## Repository status
 
-The current stacked implementation covers issues #1 through #5:
+The current stacked implementation covers issues #1 through #6:
 
 - current Slack `agent_view` manifest;
 - writable Messages tab and App Home;
@@ -68,14 +68,18 @@ The current stacked implementation covers issues #1 through #5:
 - one private processing message updated in place with the final note card;
 - explicit user-provided, verified, inferred, user-edited, and unresolved labels;
 - edit, priority, reminder, meeting, and reversible verbatim controls;
-- transactional user revisions and DM-only card references;
+- least-privilege Google Calendar OAuth using `calendar.events.readonly`;
+- encrypted access/refresh tokens, automatic refresh, revocation, and disconnect;
+- minimized event lookup around the capture timestamp;
+- all plausible meeting candidates retained with no arbitrary selection;
+- standalone capture when Calendar is disconnected or unavailable;
 - PostgreSQL-backed integration tests in CI.
 
-Calendar and huddle integrations will populate verified meeting choices in later issues. Reminder wording is editable now; scheduled reminder delivery is implemented by the reminder workflow.
+Issue #7 evaluates Slack huddle and Agent-context signals. Reminder wording is editable now; scheduled reminder delivery is implemented by the reminder workflow.
 
 ## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
 
 ```bash
 cp .env.example .env
@@ -91,6 +95,7 @@ npm start
 
 - [Slack developer sandbox setup](docs/SLACK_SETUP.md)
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
+- [Google Calendar integration](docs/GOOGLE_CALENDAR.md)
 - [Database schema and ownership](docs/SCHEMA.md)
 - [Structured note transformation](docs/TRANSFORMATION.md)
 - [Interactive private note card](docs/NOTE_CARD.md)
