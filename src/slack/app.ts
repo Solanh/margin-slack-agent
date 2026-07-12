@@ -1,9 +1,11 @@
 import { App, LogLevel } from "@slack/bolt";
 import type { Environment } from "../config.js";
 import type { PostMeetingDigestRepository } from "../storage/postMeetingDigestRepository.js";
+import type { PreMeetingResurfacingRepository } from "../storage/preMeetingResurfacingRepository.js";
 import { registerCalendarActions } from "./calendarActions.js";
 import { registerNoteCardActions } from "./noteCardActions.js";
 import { registerPostMeetingDigestActions } from "./postMeetingDigestActions.js";
+import { registerPreMeetingResurfacingActions } from "./preMeetingResurfacingActions.js";
 import {
   registerSlackListeners,
   type SlackListenerDependencies,
@@ -12,6 +14,7 @@ import {
 export interface SlackApplicationDependencies
   extends SlackListenerDependencies {
   postMeetingDigests: PostMeetingDigestRepository;
+  preMeetingResurfacings: PreMeetingResurfacingRepository;
 }
 
 function toSlackLogLevel(level: Environment["LOG_LEVEL"]): LogLevel {
@@ -44,6 +47,10 @@ export function createSlackApp(
   registerNoteCardActions(app, dependencies.noteCards);
   registerCalendarActions(app, dependencies.calendarConnections);
   registerPostMeetingDigestActions(app, dependencies.postMeetingDigests);
+  registerPreMeetingResurfacingActions(
+    app,
+    dependencies.preMeetingResurfacings,
+  );
 
   return app;
 }
