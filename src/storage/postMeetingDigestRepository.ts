@@ -60,7 +60,6 @@ export interface PostMeetingDigestRepository {
     errorCode: string,
     retryAt: Date,
   ): Promise<void>;
-  markSkipped(owner: OwnerScope, digestId: string, reason: string): Promise<void>;
   snooze(owner: OwnerScope, digestId: string, until: Date): Promise<PostMeetingDigest>;
   setDigestsEnabled(owner: OwnerScope, enabled: boolean): Promise<void>;
   areDigestsEnabled(owner: OwnerScope): Promise<boolean>;
