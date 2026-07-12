@@ -1,4 +1,8 @@
-export function buildMarginHomeView() {
+export interface MarginHomeViewState {
+  calendarConnected: boolean;
+}
+
+export function buildMarginHomeView(state: MarginHomeViewState) {
   return {
     type: "home" as const,
     blocks: [
@@ -32,8 +36,35 @@ export function buildMarginHomeView() {
         type: "section" as const,
         text: {
           type: "mrkdwn" as const,
-          text: "*Prototype status*\nPrivate messages are now saved durably and idempotently before Margin responds. Meeting context and AI organization are not enabled yet.",
+          text: state.calendarConnected
+            ? "*Google Calendar connected*\nMargin can read event titles, times, and limited attendee identifiers using a read-only event scope. Calendar descriptions are not requested or sent to the model."
+            : "*Google Calendar not connected*\nConnect Calendar to attach verified meeting context. Notes still work normally without it.",
         },
+        accessory: state.calendarConnected
+          ? {
+              type: "button" as const,
+              action_id: "margin_google_calendar_disconnect",
+              text: { type: "plain_text" as const, text: "Disconnect" },
+              style: "danger" as const,
+              confirm: {
+                title: { type: "plain_text" as const, text: "Disconnect Calendar?" },
+                text: {
+                  type: "mrkdwn" as const,
+                  text: "Margin will revoke the Google token when possible and delete the stored encrypted credentials.",
+                },
+                confirm: { type: "plain_text" as const, text: "Disconnect" },
+                deny: { type: "plain_text" as const, text: "Cancel" },
+              },
+            }
+          : {
+              type: "button" as const,
+              action_id: "margin_google_calendar_connect",
+              text: { type: "plain_text" as const, text: "Connect Calendar" },
+              style: "primary" as const,
+            },
+      },
+      {
+        type: "divider" as const,
       },
       {
         type: "section" as const,
