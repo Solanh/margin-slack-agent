@@ -21,7 +21,7 @@ describe("Slack shell", () => {
     ).toBe(true);
   });
 
-  it("rejects bot messages, subtypes, empty text, and missing channels", () => {
+  it("rejects bot messages, subtypes, empty text, shared channels, and missing channels", () => {
     expect(
       isUserTextMessage({
         channel: "D123",
@@ -52,6 +52,15 @@ describe("Slack shell", () => {
 
     expect(
       isUserTextMessage({
+        channel: "C123",
+        user: "U123",
+        text: "private note accidentally sent here",
+        ts: "123.456",
+      }),
+    ).toBe(false);
+
+    expect(
+      isUserTextMessage({
         user: "U123",
         text: "remember this",
         ts: "123.456",
@@ -59,22 +68,35 @@ describe("Slack shell", () => {
     ).toBe(false);
   });
 
-  it("extracts the workspace from direct and authorization payloads", () => {
+  it("extracts the workspace from direct, team, and authorization payloads", () => {
     expect(getWorkspaceId({ team_id: "T123" })).toBe("T123");
+    expect(getWorkspaceId({ team: { id: "T234" } })).toBe("T234");
     expect(
       getWorkspaceId({ authorizations: [{ team_id: "T456" }] }),
     ).toBe("T456");
     expect(getWorkspaceId({})).toBeNull();
   });
 
-  it("builds a Home tab and honest capture acknowledgements", () => {
-    const home = buildMarginHomeView();
+  it("builds disconnected and connected Home tabs with honest controls", () => {
+    const disconnectedHome = buildMarginHomeView({
+      calendarConnected: false,
+    });
+    const connectedHome = buildMarginHomeView({
+      calendarConnected: true,
+    });
     const acknowledgement = buildCaptureAcknowledgement();
     const failure = buildCaptureFailureAcknowledgement();
 
-    expect(home.type).toBe("home");
-    expect(home.blocks.length).toBeGreaterThan(0);
-    expect(JSON.stringify(home)).toContain("does not record or transcribe");
+    expect(disconnectedHome.type).toBe("home");
+    expect(disconnectedHome.blocks.length).toBeGreaterThan(0);
+    expect(JSON.stringify(disconnectedHome)).toContain(
+      "does not record or transcribe",
+    );
+    expect(JSON.stringify(disconnectedHome)).toContain("Connect Calendar");
+    expect(JSON.stringify(connectedHome)).toContain(
+      "Google Calendar connected",
+    );
+    expect(JSON.stringify(connectedHome)).toContain("Disconnect");
     expect(JSON.stringify(acknowledgement)).toContain(
       "exact message was saved privately",
     );
