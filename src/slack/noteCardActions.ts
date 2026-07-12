@@ -21,6 +21,11 @@ const DisplayActionSchema = z.object({
   displayMode: z.enum(["organized", "verbatim"]),
 });
 
+const ContextCandidateActionSchema = z.object({
+  noteId: z.string().uuid(),
+  candidateId: z.string().uuid(),
+});
+
 interface SlackActionContext {
   owner: OwnerScope;
   userId: string;
@@ -127,6 +132,34 @@ export function registerNoteCardActions(
         );
       } catch (error) {
         logger.error("Unable to update note display mode", error);
+      }
+    },
+  );
+
+  app.action(
+    "margin_context_candidate_select",
+    async ({ ack, body, action, client, logger }) => {
+      await ack();
+      try {
+        const context = actionContext(body, action);
+        const parsed = ContextCandidateActionSchema.parse(actionValue(action));
+        if (parsed.noteId !== context.location.noteId) {
+          throw new Error("Context candidate does not match the note card");
+        }
+        await noteCards.selectContextCandidate(
+          context.owner,
+          parsed.noteId,
+          parsed.candidateId,
+        );
+        await refreshCard(
+          client,
+          noteCards,
+          context.owner,
+          context.userId,
+          context.location,
+        );
+      } catch (error) {
+        logger.error("Unable to select note context candidate", error);
       }
     },
   );
