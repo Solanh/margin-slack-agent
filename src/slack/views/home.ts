@@ -1,10 +1,14 @@
+import { loadGoogleEnvironment } from "../../config.js";
+
 export interface MarginHomeViewState {
-  calendarAvailable: boolean;
+  calendarAvailable?: boolean;
   calendarConnected: boolean;
 }
 
 export function buildMarginHomeView(state: MarginHomeViewState) {
-  const calendarSection = state.calendarAvailable
+  const calendarAvailable =
+    state.calendarAvailable ?? loadGoogleEnvironment().enabled;
+  const calendarSection = calendarAvailable
     ? {
         type: "section" as const,
         text: {
