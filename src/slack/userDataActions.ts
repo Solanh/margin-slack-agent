@@ -4,6 +4,7 @@ import type { GoogleCalendarConnectionService } from "../services/googleCalendar
 import type { UserDataControlService } from "../services/userDataControls.js";
 import type { OwnerScope } from "../domain/note.js";
 import { getWorkspaceId } from "./listeners.js";
+import { SlackApiExecutor } from "./slackApiExecutor.js";
 import { buildMarginHomeView } from "./views/home.js";
 import { buildRetentionSettingsModal } from "./views/userDataControls.js";
 
@@ -22,6 +23,8 @@ export function registerUserDataActions(
   userData: UserDataControlService,
   calendarConnections: GoogleCalendarConnectionService,
 ): void {
+  const nonIdempotentSlack = new SlackApiExecutor({ defaultMaxAttempts: 1 });
+
   app.action("margin_export_data", async ({ ack, body, client, logger }) => {
     await ack();
     try {
@@ -34,14 +37,18 @@ export function registerUserDataActions(
         throw new Error("private_export_channel_unavailable");
       }
 
-      await (client as WebClient as unknown as FilesUploadClient).filesUploadV2({
-        channel_id: channelId,
-        content,
-        filename: `margin-data-export-${exportedAt.toISOString().slice(0, 10)}.json`,
-        title: "Margin data export",
-        initial_comment:
-          "Your private Margin data export. OAuth tokens and authorization state are excluded.",
-      });
+      await nonIdempotentSlack.execute(
+        { operation: "filesUploadV2", safety: "non_idempotent" },
+        () =>
+          (client as WebClient as unknown as FilesUploadClient).filesUploadV2({
+            channel_id: channelId,
+            content,
+            filename: `margin-data-export-${exportedAt.toISOString().slice(0, 10)}.json`,
+            title: "Margin data export",
+            initial_comment:
+              "Your private Margin data export. OAuth tokens and authorization state are excluded.",
+          }),
+      );
     } catch (error) {
       logger.error("Unable to export Margin user data", error);
     }
