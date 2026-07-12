@@ -26,6 +26,20 @@ export const ContextConfidenceSchema = z.enum([
   "unresolved",
 ]);
 
+export const ContextSourceSchema = z.enum([
+  "google_calendar",
+  "slack_huddle",
+  "explicit",
+  "standalone",
+]);
+
+export const ContextResolutionStatusSchema = z.enum([
+  "pending",
+  "attached",
+  "needs_clarification",
+  "standalone",
+]);
+
 export const RevisionSourceSchema = z.enum(["user", "ai", "system"]);
 export const ReminderTypeSchema = z.enum(["fixed", "event_relative"]);
 export const ReminderStatusSchema = z.enum([
@@ -83,6 +97,10 @@ export const TransformationSchema = z.object({
 
 export type Transformation = z.infer<typeof TransformationSchema>;
 export type InferredField = z.infer<typeof InferredFieldSchema>;
+export type ContextSource = z.infer<typeof ContextSourceSchema>;
+export type ContextResolutionStatus = z.infer<
+  typeof ContextResolutionStatusSchema
+>;
 
 export interface OwnerScope {
   workspaceId: string;
@@ -110,6 +128,24 @@ export interface MeetingContext extends OwnerScope {
   updatedAt: Date;
 }
 
+export interface ContextCandidate extends OwnerScope {
+  id: string;
+  noteId: string;
+  meetingId: string | null;
+  source: ContextSource;
+  score: number;
+  confidence: z.infer<typeof ContextConfidenceSchema>;
+  signals: Record<string, unknown>;
+  selected: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ContextCandidateWithMeeting {
+  candidate: ContextCandidate;
+  meeting: MeetingContext | null;
+}
+
 export interface Note extends RawNote {
   organizedText: string | null;
   noteType: z.infer<typeof NoteTypeSchema> | null;
@@ -117,7 +153,9 @@ export interface Note extends RawNote {
   status: z.infer<typeof NoteStatusSchema>;
   displayMode: z.infer<typeof DisplayModeSchema>;
   meetingId: string | null;
+  contextSource: ContextSource;
   contextConfidence: z.infer<typeof ContextConfidenceSchema>;
+  contextResolutionStatus: ContextResolutionStatus;
   reminderIntent: string | null;
   explicitDueAt: Date | null;
   inferredFields: InferredField[];
