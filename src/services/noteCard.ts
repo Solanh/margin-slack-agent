@@ -2,8 +2,10 @@ import { z } from "zod";
 import {
   DisplayModeSchema,
   PrioritySchema,
+  type ContextCandidateWithMeeting,
   type OwnerScope,
 } from "../domain/note.js";
+import type { ContextCandidateRepository } from "../storage/contextCandidateRepository.js";
 import type { MeetingRepository } from "../storage/meetingRepository.js";
 import type {
   NoteCardData,
@@ -20,6 +22,7 @@ export class NoteCardService {
     private readonly notes: NoteRepository,
     private readonly interactions: NoteInteractionRepository,
     private readonly meetings: MeetingRepository,
+    private readonly contextCandidates: ContextCandidateRepository,
   ) {}
 
   async getCardData(owner: OwnerScope, noteId: string): Promise<NoteCardData> {
@@ -28,11 +31,22 @@ export class NoteCardService {
       throw new Error("Owner-scoped note was not found");
     }
 
-    const meeting = note.meetingId
-      ? await this.meetings.getById(owner, note.meetingId)
-      : null;
+    const [meeting, candidates] = await Promise.all([
+      note.meetingId
+        ? this.meetings.getById(owner, note.meetingId)
+        : Promise.resolve(null),
+      this.contextCandidates.listForNote(owner, noteId),
+    ]);
+    const contextCandidates: ContextCandidateWithMeeting[] = await Promise.all(
+      candidates.map(async (candidate) => ({
+        candidate,
+        meeting: candidate.meetingId
+          ? await this.meetings.getById(owner, candidate.meetingId)
+          : null,
+      })),
+    );
 
-    return { note, meeting };
+    return { note, meeting, contextCandidates };
   }
 
   recordCardReference(
@@ -109,20 +123,40 @@ export class NoteCardService {
       }
     }
 
-    return this.interactions.applyUserPatch({
-      ...owner,
+    return this.contextCandidates.selectExplicitMeeting(
+      owner,
       noteId,
-      patch: {
-        meetingId,
-        contextConfidence: meetingId ? "exact" : "unresolved",
-      },
-    });
+      meetingId,
+    );
+  }
+
+  selectContextCandidate(
+    owner: OwnerScope,
+    noteId: string,
+    candidateId: string,
+  ) {
+    return this.contextCandidates.selectCandidate(owner, noteId, candidateId);
   }
 
   async listMeetingCandidates(owner: OwnerScope, noteId: string) {
     const note = await this.notes.getById(owner, noteId);
     if (!note) {
       throw new Error("Owner-scoped note was not found");
+    }
+
+    const scored = await this.contextCandidates.listForNote(owner, noteId);
+    const scoredMeetings = await Promise.all(
+      scored
+        .filter((candidate) => candidate.meetingId !== null)
+        .map((candidate) =>
+          this.meetings.getById(owner, candidate.meetingId as string),
+        ),
+    );
+    const available = scoredMeetings.filter(
+      (meeting): meeting is NonNullable<typeof meeting> => meeting !== null,
+    );
+    if (available.length > 0) {
+      return available;
     }
 
     const toleranceMs = 5 * 60 * 1000;

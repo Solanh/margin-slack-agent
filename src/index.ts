@@ -7,8 +7,8 @@ import {
 } from "./config.js";
 import { GoogleOAuthCallbackServer } from "./http/googleOAuthCallbackServer.js";
 import { AesGcmTokenCipher } from "./security/tokenCipher.js";
-import { CalendarContextResolver } from "./services/calendarContextResolver.js";
 import { CaptureRawNoteService } from "./services/captureRawNote.js";
+import { ContextResolutionService } from "./services/contextResolution.js";
 import { GoogleCalendarApiService } from "./services/googleCalendarApi.js";
 import {
   GoogleCalendarConnectionService,
@@ -18,9 +18,9 @@ import { NoteCardService } from "./services/noteCard.js";
 import { OpenAITransformationModel } from "./services/openAITransformationModel.js";
 import { OrganizeNoteService } from "./services/organizeNote.js";
 import { SlackContextSignalService } from "./services/slackContextSignals.js";
-import { SlackHuddleContextResolver } from "./services/slackHuddleContextResolver.js";
 import { createSlackApp } from "./slack/app.js";
 import { createPostgresPool } from "./storage/postgres.js";
+import { PostgresContextCandidateRepository } from "./storage/postgresContextCandidateRepository.js";
 import { PostgresMeetingRepository } from "./storage/postgresMeetingRepository.js";
 import { PostgresNoteInteractionRepository } from "./storage/postgresNoteInteractionRepository.js";
 import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
@@ -45,6 +45,10 @@ const interactionRepository = new PostgresNoteInteractionRepository(
   pool,
   noteRepository,
 );
+const contextCandidateRepository = new PostgresContextCandidateRepository(
+  pool,
+  noteRepository,
+);
 const transformationRepository = new PostgresTransformationRepository(
   pool,
   noteRepository,
@@ -58,11 +62,6 @@ const slackContextSignalRepository =
   new PostgresSlackContextSignalRepository(pool);
 const slackContextSignals = new SlackContextSignalService(
   slackContextSignalRepository,
-);
-const slackHuddleContextResolver = new SlackHuddleContextResolver(
-  noteRepository,
-  meetingRepository,
-  slackContextSignals,
 );
 const googleOAuthClient = new GoogleCalendarOAuthClient({
   clientId: googleEnvironment.GOOGLE_CLIENT_ID,
@@ -78,10 +77,12 @@ const googleCalendar = new GoogleCalendarApiService(
   oauthConnectionRepository,
   googleOAuthClient,
 );
-const calendarContextResolver = new CalendarContextResolver(
+const contextResolver = new ContextResolutionService(
   noteRepository,
   meetingRepository,
+  contextCandidateRepository,
   googleCalendar,
+  slackContextSignals,
 );
 const callbackServer = new GoogleOAuthCallbackServer(
   {
@@ -106,15 +107,15 @@ const noteCards = new NoteCardService(
   noteRepository,
   interactionRepository,
   meetingRepository,
+  contextCandidateRepository,
 );
 const app = createSlackApp(environment, {
   rawNoteCapturer,
   organizer,
   noteCards,
-  calendarContextResolver,
+  contextResolver,
   calendarConnections,
   slackContextSignals,
-  slackHuddleContextResolver,
 });
 
 async function start(): Promise<void> {
@@ -123,7 +124,7 @@ async function start(): Promise<void> {
   await callbackServer.start();
   await app.start();
   console.log(
-    "Margin is connected to Slack, PostgreSQL, note organization, Google OAuth, and expiring Slack context signals.",
+    "Margin is connected to Slack, PostgreSQL, scored context resolution, note organization, and Google OAuth.",
   );
 }
 

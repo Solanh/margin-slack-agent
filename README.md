@@ -2,7 +2,7 @@
 
 > **Working title:** Margin — your private margin notes for meetings in Slack.
 
-Margin is a private, calendar-aware memory agent for Slack. During a huddle or meeting, DM it the one sentence you do not want to lose. Margin immediately preserves the original, attaches the most likely meeting context, produces a clearly labeled organized version, and resurfaces it when it becomes useful.
+Margin is a private, calendar-aware memory agent for Slack. During a huddle or meeting, DM it the one sentence you do not want to lose. Margin immediately preserves the original, scores supported context signals, attaches context only when evidence is clear, produces a labeled organized version, and resurfaces it when useful.
 
 ## Why this exists
 
@@ -15,7 +15,7 @@ Margin preserves that low-friction behavior rather than replacing it with a reco
 1. **You choose what matters.** Margin never records the meeting.
 2. **Your original is permanent.** AI output is a derived view, never a replacement.
 3. **Context is attached, not invented.** Meeting metadata comes from supported Slack and Calendar signals.
-4. **Uncertainty is visible.** Inferred fields are labeled and ambiguous context is confirmed.
+4. **Uncertainty is visible.** Close or weak candidates produce one narrow question instead of a guess.
 5. **Notes return at useful moments.** After the meeting and before the next related meeting.
 
 ## Example
@@ -24,16 +24,13 @@ You DM Margin during a huddle:
 
 > important ask if migration also affects customer-created workflows. remind me before planning
 
-Margin responds:
+When context is clear, Margin attaches it automatically. When a huddle and Calendar event overlap, the same private card asks:
 
-**Open question · High priority**  
-Confirm whether the migration also affects workflows created directly by customers.
+- `Workflow Migration Review`
+- `Slack huddle (title unavailable)`
+- `No meeting`
 
-**Context:** Slack huddle (title unavailable)  
-**Reminder:** Before the next planning meeting  
-**Original preserved:** Yes
-
-Actions: `Edit` · `Change priority` · `Change meeting` · `Keep verbatim`
+One tap updates that existing card; no second result message is posted.
 
 ## Product scope
 
@@ -42,6 +39,7 @@ The hackathon MVP is intentionally narrow:
 - Slack Agent View / DM capture
 - durable raw-note write before any AI call
 - meeting-context resolution from Google Calendar and Slack huddle state
+- deterministic scoring and one-tap clarification
 - structured note transformation with explicit uncertainty
 - note card actions
 - private post-meeting digest
@@ -52,7 +50,7 @@ Margin does **not** record audio, transcribe meetings, read unrelated channel hi
 
 ## Repository status
 
-The current stacked implementation covers issues #1 through #7:
+The current stacked implementation covers issues #1 through #8:
 
 - current Slack `agent_view` manifest;
 - writable Messages tab and App Home;
@@ -71,19 +69,21 @@ The current stacked implementation covers issues #1 through #7:
 - least-privilege Google Calendar OAuth using `calendar.events.readonly`;
 - encrypted access/refresh tokens, automatic refresh, revocation, and disconnect;
 - minimized event lookup around the capture timestamp;
-- all plausible Calendar candidates retained with no arbitrary selection;
 - `user_huddle_changed` and current-user profile refresh for active-huddle evidence;
 - short-lived, owner-scoped active-view channel/message context;
 - generic title-unavailable huddle records with no invented participants;
-- no `calls:read`, native-call lookup, audio, transcript, or channel-history dependency;
-- standalone capture when Calendar or Slack metadata is missing;
+- normalized Calendar, huddle, explicit, and standalone context candidates;
+- persisted source, score, confidence, signals, selection, and resolution status;
+- automatic attachment only at score ≥85 with a lead greater than 15 points;
+- text-only evidence capped below high confidence;
+- ranked one-tap clarification buttons with `No meeting` always available;
 - PostgreSQL-backed integration tests in CI.
 
 Reminder wording is editable now; scheduled reminder delivery is implemented by the reminder workflow.
 
 ## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [Slack context signals](docs/SLACK_CONTEXT_SIGNALS.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [Slack context signals](docs/SLACK_CONTEXT_SIGNALS.md), [context resolution](docs/CONTEXT_RESOLUTION.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
 
 ```bash
 cp .env.example .env
@@ -101,6 +101,7 @@ npm start
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
 - [Google Calendar integration](docs/GOOGLE_CALENDAR.md)
 - [Slack huddle and Agent-context signals](docs/SLACK_CONTEXT_SIGNALS.md)
+- [Context scoring and clarification](docs/CONTEXT_RESOLUTION.md)
 - [Database schema and ownership](docs/SCHEMA.md)
 - [Structured note transformation](docs/TRANSFORMATION.md)
 - [Interactive private note card](docs/NOTE_CARD.md)

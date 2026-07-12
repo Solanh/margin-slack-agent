@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MeetingContext, Note } from "../src/domain/note.js";
 import { NoteCardService } from "../src/services/noteCard.js";
+import type { ContextCandidateRepository } from "../src/storage/contextCandidateRepository.js";
 import type { MeetingRepository } from "../src/storage/meetingRepository.js";
 import type {
   NoteInteractionRepository,
@@ -23,7 +24,9 @@ const note: Note = {
   status: "open",
   displayMode: "organized",
   meetingId,
+  contextSource: "explicit",
   contextConfidence: "exact",
+  contextResolutionStatus: "attached",
   reminderIntent: null,
   explicitDueAt: null,
   inferredFields: ["organizedText", "noteType", "priority"],
@@ -66,25 +69,39 @@ function setup() {
     getById: vi.fn(async () => meeting),
     listOverlapping: vi.fn(async () => [meeting]),
   };
+  const contextCandidates: ContextCandidateRepository = {
+    persistResolution: vi.fn(async () => note),
+    listForNote: vi.fn(async () => []),
+    selectCandidate: vi.fn(async () => note),
+    selectExplicitMeeting: vi.fn(async () => note),
+  };
 
   return {
-    service: new NoteCardService(notes, interactions, meetings),
+    service: new NoteCardService(
+      notes,
+      interactions,
+      meetings,
+      contextCandidates,
+    ),
     notes,
     interactions,
     meetings,
+    contextCandidates,
   };
 }
 
 describe("NoteCardService", () => {
   it("loads an owner-scoped note with verified meeting context", async () => {
-    const { service, notes, meetings } = setup();
+    const { service, notes, meetings, contextCandidates } = setup();
 
     await expect(service.getCardData(owner, noteId)).resolves.toEqual({
       note,
       meeting,
+      contextCandidates: [],
     });
     expect(notes.getById).toHaveBeenCalledWith(owner, noteId);
     expect(meetings.getById).toHaveBeenCalledWith(owner, meetingId);
+    expect(contextCandidates.listForNote).toHaveBeenCalledWith(owner, noteId);
   });
 
   it("marks organized text and priority as user-edited", async () => {
@@ -134,16 +151,29 @@ describe("NoteCardService", () => {
     });
   });
 
-  it("requires an owner-scoped meeting before attachment", async () => {
-    const { service, interactions, meetings } = setup();
+  it("requires an owner-scoped meeting and records explicit selection", async () => {
+    const { service, contextCandidates, meetings } = setup();
 
     await service.setMeeting(owner, noteId, meetingId);
 
     expect(meetings.getById).toHaveBeenCalledWith(owner, meetingId);
-    expect(interactions.applyUserPatch).toHaveBeenCalledWith({
-      ...owner,
+    expect(contextCandidates.selectExplicitMeeting).toHaveBeenCalledWith(
+      owner,
       noteId,
-      patch: { meetingId, contextConfidence: "exact" },
-    });
+      meetingId,
+    );
+  });
+
+  it("selects one scored context candidate", async () => {
+    const { service, contextCandidates } = setup();
+    const candidateId = "33333333-3333-4333-8333-333333333333";
+
+    await service.selectContextCandidate(owner, noteId, candidateId);
+
+    expect(contextCandidates.selectCandidate).toHaveBeenCalledWith(
+      owner,
+      noteId,
+      candidateId,
+    );
   });
 });

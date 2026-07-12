@@ -20,7 +20,9 @@ const note: Note = {
   status: "open",
   displayMode: "organized",
   meetingId: null,
+  contextSource: "standalone",
   contextConfidence: "unresolved",
+  contextResolutionStatus: "standalone",
   reminderIntent: null,
   explicitDueAt: null,
   inferredFields: [],
@@ -54,7 +56,9 @@ function setup(active = true) {
     setMeetingContext: vi.fn(async () => ({
       ...note,
       meetingId: meeting.id,
+      contextSource: "slack_huddle" as const,
       contextConfidence: "exact" as const,
+      contextResolutionStatus: "attached" as const,
     })),
     appendRevision: vi.fn(),
   };

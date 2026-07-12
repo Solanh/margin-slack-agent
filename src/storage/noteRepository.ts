@@ -1,4 +1,5 @@
 import type {
+  ContextCandidateWithMeeting,
   InferredField,
   MeetingContext,
   Note,
@@ -61,7 +62,9 @@ export interface UserNotePatch {
   reminderIntent?: string | null | undefined;
   explicitDueAt?: Date | null | undefined;
   meetingId?: string | null | undefined;
+  contextSource?: Note["contextSource"] | undefined;
   contextConfidence?: Note["contextConfidence"] | undefined;
+  contextResolutionStatus?: Note["contextResolutionStatus"] | undefined;
   removeInferredFields?: InferredField[] | undefined;
 }
 
@@ -74,6 +77,7 @@ export interface SetMeetingContextInput extends OwnerScope {
   noteId: string;
   meetingId: string;
   contextConfidence: Note["contextConfidence"];
+  contextSource?: Exclude<Note["contextSource"], "standalone"> | undefined;
 }
 
 export interface RawNoteRepository {
@@ -117,4 +121,5 @@ export interface NoteInteractionRepository {
 export interface NoteCardData {
   note: Note;
   meeting: MeetingContext | null;
+  contextCandidates: ContextCandidateWithMeeting[];
 }

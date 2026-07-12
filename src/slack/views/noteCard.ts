@@ -1,4 +1,9 @@
-import type { InferredField, MeetingContext, Note } from "../../domain/note.js";
+import type {
+  ContextCandidateWithMeeting,
+  InferredField,
+  MeetingContext,
+  Note,
+} from "../../domain/note.js";
 import type { NoteCardData } from "../../storage/noteRepository.js";
 
 export type SlackBlock = Record<string, unknown>;
@@ -80,6 +85,10 @@ export function buildNoteCardBlocks(
     type: "section",
     fields: buildMetadataFields(note, meeting, timeZone),
   });
+
+  if (note.contextResolutionStatus === "needs_clarification") {
+    blocks.push(...buildContextClarificationBlocks(data.contextCandidates));
+  }
 
   if (note.uncertainties.length > 0) {
     blocks.push({
@@ -166,10 +175,67 @@ export function buildNoteCardBlocks(
 
 export function buildNoteCardFallbackText(data: NoteCardData): string {
   const { note } = data;
+  const contextPrompt =
+    note.contextResolutionStatus === "needs_clarification"
+      ? "\n\nChoose the meeting context in Slack."
+      : "";
   if (note.displayMode === "organized" && note.organizedText) {
-    return `${note.organizedText}\n\nOriginal preserved: ${note.rawText}`;
+    return `${note.organizedText}\n\nOriginal preserved: ${note.rawText}${contextPrompt}`;
   }
-  return `Note saved verbatim: ${note.rawText}`;
+  return `Note saved verbatim: ${note.rawText}${contextPrompt}`;
+}
+
+function buildContextClarificationBlocks(
+  candidates: ContextCandidateWithMeeting[],
+): SlackBlock[] {
+  const rankedMeetings = candidates
+    .filter(
+      (item) =>
+        item.candidate.source !== "standalone" && item.meeting !== null,
+    )
+    .slice(0, 3);
+  const standalone = candidates.find(
+    (item) => item.candidate.source === "standalone",
+  );
+  const elements = rankedMeetings.map((item) => ({
+    type: "button",
+    action_id: "margin_context_candidate_select",
+    text: {
+      type: "plain_text",
+      text: truncatePlainText(item.meeting?.title ?? "Meeting", 70),
+    },
+    value: JSON.stringify({
+      noteId: item.candidate.noteId,
+      candidateId: item.candidate.id,
+    }),
+  }));
+
+  if (standalone) {
+    elements.push({
+      type: "button",
+      action_id: "margin_context_candidate_select",
+      text: { type: "plain_text", text: "No meeting" },
+      value: JSON.stringify({
+        noteId: standalone.candidate.noteId,
+        candidateId: standalone.candidate.id,
+      }),
+    });
+  }
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Which meeting was this from?*\nMargin found more than one plausible context and will not guess.",
+      },
+    },
+    {
+      type: "actions",
+      block_id: `margin_context_candidates_${candidates[0]?.candidate.noteId ?? "unknown"}`,
+      elements,
+    },
+  ];
 }
 
 function buildHeader(note: Note): string {
@@ -191,9 +257,7 @@ function buildMetadataFields(
     : "Not classified · Unresolved";
   const priorityValue = `${formatPriority(note.priority)} · ${fieldProvenance(note, "priority")}`;
   const reminderValue = buildReminderValue(note, timeZone);
-  const meetingValue = meeting
-    ? `${escapeSlackMrkdwn(meeting.title)}\n${formatDateRange(meeting, timeZone)} · Verified (${meeting.confidence})`
-    : "Not attached · Unresolved";
+  const meetingValue = buildMeetingValue(note, meeting, timeZone);
 
   return [
     { type: "mrkdwn", text: `*Type*\n${typeValue}` },
@@ -201,6 +265,20 @@ function buildMetadataFields(
     { type: "mrkdwn", text: `*Reminder*\n${reminderValue}` },
     { type: "mrkdwn", text: `*Meeting*\n${meetingValue}` },
   ];
+}
+
+function buildMeetingValue(
+  note: Note,
+  meeting: MeetingContext | null,
+  timeZone: string,
+): string {
+  if (meeting) {
+    return `${escapeSlackMrkdwn(meeting.title)}\n${formatDateRange(meeting, timeZone)} · ${formatContextSource(note.contextSource)} · ${formatLabel(note.contextConfidence)}`;
+  }
+  if (note.contextResolutionStatus === "needs_clarification") {
+    return "Needs confirmation · choose below";
+  }
+  return "No meeting · Standalone";
 }
 
 function buildReminderValue(note: Note, timeZone: string): string {
@@ -242,6 +320,20 @@ function formatDateTime(date: Date, timeZone: string): string {
   }
 }
 
+function formatContextSource(source: Note["contextSource"]): string {
+  switch (source) {
+    case "google_calendar":
+      return "Google Calendar";
+    case "slack_huddle":
+      return "Slack huddle";
+    case "explicit":
+      return "User-selected";
+    case "standalone":
+    default:
+      return "Standalone";
+  }
+}
+
 function formatPriority(priority: Note["priority"]): string {
   return formatLabel(priority);
 }
@@ -262,4 +354,10 @@ function truncate(value: string, maximum: number): string {
     return value;
   }
   return `${value.slice(0, maximum - 1)}…`;
+}
+
+function truncatePlainText(value: string, maximum: number): string {
+  return value.length <= maximum
+    ? value
+    : `${value.slice(0, maximum - 1)}…`;
 }

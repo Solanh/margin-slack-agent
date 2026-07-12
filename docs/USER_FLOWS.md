@@ -1,65 +1,94 @@
 # User Flows
 
-## Flow A: Capture during a clear calendar meeting
+## Flow A: Clear Calendar context
 
-1. User DMs: “important ask if migration affects customer-created workflows”
-2. Slack event is acknowledged.
-3. Raw note is durably stored.
-4. Calendar resolver finds one event currently in progress.
-5. AI returns structured output.
-6. Margin sends a private note card.
-7. User takes no further action.
+1. User DMs: “important ask if migration affects customer-created workflows.”
+2. Raw note is stored exactly.
+3. Margin finds one active Calendar event.
+4. The event scores at least 85 and has no close competitor.
+5. Margin attaches the event and organizes the note.
+6. The processing message updates into the final private card.
 
-Success condition: capture requires one message and no confirmation.
+Success condition: one user message and no confirmation.
 
 ## Flow B: Ambiguous meeting context
 
-1. User sends a note while two overlapping calendar events exist.
-2. Raw note is stored as standalone/pending.
-3. Margin replies:
+1. User sends a note while two overlapping events exist, or while both a huddle and a Calendar event are active.
+2. Raw note is stored and every candidate is persisted.
+3. The top candidates are within 15 points, so Margin does not attach either.
+4. The same note card asks:
    - `Architecture sync`
    - `Customer escalation`
    - `No meeting`
-4. User taps one option.
-5. Context is attached and the card updates.
+5. User taps one option.
+6. The note becomes user-selected/exact context and the same card updates.
 
-Success condition: Margin asks one narrow question instead of guessing.
+Success condition: one narrow question, one tap, no guess, no duplicate message.
 
-## Flow C: Active huddle without calendar event
+## Flow C: Clear active huddle
 
-1. User is in a Slack huddle.
-2. Margin receives/caches huddle-state information.
-3. User DMs a note.
-4. Margin attaches huddle context when supported.
-5. If title or participant details are unavailable, it labels context as “Slack huddle” rather than inventing metadata.
+1. Margin has current `user_huddle_changed` or profile huddle evidence.
+2. User DMs a note.
+3. No competing meeting candidate scores closely.
+4. Margin attaches `Slack huddle (title unavailable)` with no invented participants.
+5. The card labels Slack huddle as the source and exact as the huddle-state confidence.
 
-## Flow D: AI failure
+## Flow D: Stale or weak context
 
-1. User sends a note.
-2. Raw note is stored.
-3. Transformation request fails.
-4. Margin replies: “Saved verbatim. I could not organize it yet.”
-5. The note remains searchable and can be reprocessed later.
+1. A Calendar event ended just before capture but falls inside the tolerance window.
+2. It is retained as a low-confidence candidate but remains below the automatic threshold.
+3. Margin asks the user to choose that event or `No meeting`.
 
-Success condition: no note is lost because a model or provider failed.
+Success condition: weak temporal evidence never silently becomes context.
 
-## Flow E: Explicit reminder
+## Flow E: No meeting
+
+1. User sends a standalone private note.
+2. Calendar and huddle providers produce no candidate.
+3. Margin selects the standalone candidate.
+4. Organization and card delivery continue normally.
+
+Meeting awareness is an enhancement, not a capture requirement.
+
+## Flow F: Provider or metadata failure
+
+1. Raw note is stored.
+2. Calendar, Slack metadata, or the candidate repository fails.
+3. Margin logs an identifier/failure category and continues organization without hidden context.
+4. The note remains usable and its original remains immutable.
+
+## Flow G: AI failure
+
+1. Raw note and context decision are stored.
+2. Transformation fails or returns invalid structured output.
+3. The existing card becomes a verbatim card.
+4. The note remains searchable and can be reprocessed later.
+
+## Flow H: User changes meeting later
+
+1. User selects **Meeting** on the card.
+2. Margin lists owner-scoped scored/overlapping meetings plus `No meeting`.
+3. User chooses a meeting.
+4. Margin records a 100-point explicit candidate and exact context.
+5. The existing card updates.
+
+## Flow I: Explicit reminder
 
 User sends:
 
 > Ask Maya about the rollout flags. Remind me tomorrow at 9.
 
-Margin extracts the explicit time, displays it, and requires no extra interaction unless the timezone is unclear.
+Margin extracts the exact time only when wording and timezone are sufficient, labels the interpretation, and preserves the original.
 
-## Flow F: Implicit reminder
+## Flow J: Relative reminder
 
 User sends:
 
 > Ask about rollout flags before the next planning meeting.
 
-Margin stores a relative reminder rule tied to the next matching calendar event. It does not fabricate a clock time.
+Margin stores the relative wording without fabricating a clock time. Delivery scheduling is implemented by the reminder workflow.
 
-## Flow G: Post-meeting digest
+## Flow K: Post-meeting digest
 
 At meeting end:
 
@@ -70,35 +99,24 @@ At meeting end:
 >
 > **Actions**
 > - Verify rollout flag ownership.
->
-> `Review all` · `Snooze digest`
 
-Only user-captured notes appear.
+Only user-captured notes appear. This is later roadmap work.
 
-## Flow H: Pre-meeting resurfacing
+## Flow L: Pre-meeting resurfacing
 
-Before the next planning meeting:
+Before the next related meeting:
 
 > **From your last planning meeting**
 >
 > - Open question: Does migration affect customer-created workflows?
 > - Action: Verify rollout flag ownership.
->
-> `Mark resolved` · `Snooze` · `Open notes`
 
-## Flow I: Retrieval
+This is later roadmap work.
+
+## Flow M: Retrieval
 
 User asks:
 
 > What did I note about customer workflows?
 
-Margin returns ranked private results with:
-
-- organized note;
-- meeting and date;
-- status;
-- a control to reveal the original.
-
-## Flow J: Standalone note
-
-If the user is not in a meeting, a DM still creates a normal private note. Meeting-aware behavior is an enhancement, not a capture requirement.
+Margin returns ranked private results with organized text, meeting/date, status, and a control to reveal the original. Retrieval is later roadmap work.
