@@ -7,7 +7,7 @@ import type {
 import type { NoteRetrievalRepository } from "../storage/noteRetrievalRepository.js";
 
 const RETRIEVAL_PATTERNS = [
-  /^(?:please\s+)?(?:find|search(?:\s+for)?|show(?:\s+me)?|list|pull\s+up|look\s+up)\s+(?:my\s+)?(?:notes?|decisions?|actions?|tasks?|questions?|ideas?|references?)\b/iu,
+  /^(?:please\s+)?(?:find|search(?:\s+for)?|show(?:\s+me)?|list|pull\s+up|look\s+up)\s+(?:(?:my|all|any|open|unresolved|outstanding|pending|resolved|completed|done|closed|archived|low|normal|high|critical|priority)\s+)*(?:notes?|decisions?|actions?|tasks?|questions?|ideas?|references?)\b/iu,
   /^(?:please\s+)?what\s+did\s+i\s+(?:note|write|save|capture|say)\b/iu,
   /^(?:please\s+)?what\s+(?:are|were)\s+my\s+(?:notes?|decisions?|actions?|questions?|ideas?)\b/iu,
   /^(?:please\s+)?do\s+i\s+have\s+(?:any\s+)?(?:notes?|decisions?|actions?|tasks?|questions?|ideas?)\b/iu,
