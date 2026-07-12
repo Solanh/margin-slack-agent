@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "demo:seed:resurfacing": "npm run build && node dist/demo/seedPreMeetingResurfacing.js",
-    "migrate": "npm run build && node dist/storage/migrate.js",
+    "migrate": "npm run build && npm run migrate:runtime",
+    "migrate:runtime": "node dist/storage/migrate.js",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
