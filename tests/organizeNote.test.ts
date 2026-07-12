@@ -37,6 +37,7 @@ function noteRepository(note: Note = rawNote): NoteRepository {
     createRaw: vi.fn(),
     getById: vi.fn(async () => note),
     saveDerived: vi.fn(),
+    setMeetingContext: vi.fn(),
     appendRevision: vi.fn(),
   };
 }

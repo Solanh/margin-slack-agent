@@ -1,5 +1,6 @@
 import { App, LogLevel } from "@slack/bolt";
 import type { Environment } from "../config.js";
+import { registerCalendarActions } from "./calendarActions.js";
 import { registerNoteCardActions } from "./noteCardActions.js";
 import {
   registerSlackListeners,
@@ -34,6 +35,7 @@ export function createSlackApp(
 
   registerSlackListeners(app, dependencies);
   registerNoteCardActions(app, dependencies.noteCards);
+  registerCalendarActions(app, dependencies.calendarConnections);
 
   return app;
 }

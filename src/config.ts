@@ -23,6 +23,14 @@ const AIEnvironmentSchema = z.object({
   AI_MODEL: z.string().min(1),
 });
 
+const GoogleEnvironmentSchema = z.object({
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
+  GOOGLE_REDIRECT_URI: z.string().url(),
+  OAUTH_HTTP_HOST: z.string().min(1).default("0.0.0.0"),
+  OAUTH_HTTP_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+});
+
 const EnvironmentSchema = SlackEnvironmentSchema.merge(
   DatabaseEnvironmentSchema,
 );
@@ -31,6 +39,7 @@ export type Environment = z.infer<typeof EnvironmentSchema>;
 export type DatabaseEnvironment = z.infer<typeof DatabaseEnvironmentSchema>;
 export type EncryptionEnvironment = z.infer<typeof EncryptionEnvironmentSchema>;
 export type AIEnvironment = z.infer<typeof AIEnvironmentSchema>;
+export type GoogleEnvironment = z.infer<typeof GoogleEnvironmentSchema>;
 
 function formatConfigurationError(
   label: string,
@@ -46,50 +55,44 @@ function formatConfigurationError(
   );
 }
 
+function parseEnvironment<T>(
+  label: string,
+  schema: z.ZodType<T>,
+  source: NodeJS.ProcessEnv,
+): T {
+  const result = schema.safeParse(source);
+  if (!result.success) {
+    throw formatConfigurationError(label, result.error);
+  }
+  return result.data;
+}
+
 export function loadEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Environment {
-  const result = EnvironmentSchema.safeParse(source);
-
-  if (!result.success) {
-    throw formatConfigurationError("application", result.error);
-  }
-
-  return result.data;
+  return parseEnvironment("application", EnvironmentSchema, source);
 }
 
 export function loadDatabaseEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): DatabaseEnvironment {
-  const result = DatabaseEnvironmentSchema.safeParse(source);
-
-  if (!result.success) {
-    throw formatConfigurationError("database", result.error);
-  }
-
-  return result.data;
+  return parseEnvironment("database", DatabaseEnvironmentSchema, source);
 }
 
 export function loadEncryptionEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): EncryptionEnvironment {
-  const result = EncryptionEnvironmentSchema.safeParse(source);
-
-  if (!result.success) {
-    throw formatConfigurationError("token encryption", result.error);
-  }
-
-  return result.data;
+  return parseEnvironment("token encryption", EncryptionEnvironmentSchema, source);
 }
 
 export function loadAIEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): AIEnvironment {
-  const result = AIEnvironmentSchema.safeParse(source);
+  return parseEnvironment("AI", AIEnvironmentSchema, source);
+}
 
-  if (!result.success) {
-    throw formatConfigurationError("AI", result.error);
-  }
-
-  return result.data;
+export function loadGoogleEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): GoogleEnvironment {
+  return parseEnvironment("Google OAuth", GoogleEnvironmentSchema, source);
 }

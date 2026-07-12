@@ -1,19 +1,41 @@
 import "dotenv/config";
-import { loadAIEnvironment, loadEnvironment } from "./config.js";
+import {
+  loadAIEnvironment,
+  loadEncryptionEnvironment,
+  loadEnvironment,
+  loadGoogleEnvironment,
+} from "./config.js";
+import { GoogleOAuthCallbackServer } from "./http/googleOAuthCallbackServer.js";
+import { AesGcmTokenCipher } from "./security/tokenCipher.js";
+import { CalendarContextResolver } from "./services/calendarContextResolver.js";
 import { CaptureRawNoteService } from "./services/captureRawNote.js";
+import { GoogleCalendarApiService } from "./services/googleCalendarApi.js";
+import {
+  GoogleCalendarConnectionService,
+  GoogleCalendarOAuthClient,
+} from "./services/googleCalendarOAuth.js";
 import { NoteCardService } from "./services/noteCard.js";
 import { OpenAITransformationModel } from "./services/openAITransformationModel.js";
 import { OrganizeNoteService } from "./services/organizeNote.js";
 import { createSlackApp } from "./slack/app.js";
-import { PostgresMeetingRepository } from "./storage/postgresMeetingRepository.js";
 import { createPostgresPool } from "./storage/postgres.js";
+import { PostgresMeetingRepository } from "./storage/postgresMeetingRepository.js";
 import { PostgresNoteInteractionRepository } from "./storage/postgresNoteInteractionRepository.js";
 import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
+import { PostgresOAuthAuthorizationStateRepository } from "./storage/postgresOAuthAuthorizationStateRepository.js";
+import { PostgresOAuthConnectionRepository } from "./storage/postgresOAuthConnectionRepository.js";
 import { PostgresTransformationRepository } from "./storage/postgresTransformationRepository.js";
 
 const environment = loadEnvironment();
 const aiEnvironment = loadAIEnvironment();
+const googleEnvironment = loadGoogleEnvironment();
+const encryptionEnvironment = loadEncryptionEnvironment();
 const pool = createPostgresPool(environment.DATABASE_URL);
+const cipher = AesGcmTokenCipher.fromBase64(
+  encryptionEnvironment.TOKEN_ENCRYPTION_KEY,
+  encryptionEnvironment.TOKEN_ENCRYPTION_KEY_VERSION,
+);
+
 const noteRepository = new PostgresNoteRepository(pool);
 const meetingRepository = new PostgresMeetingRepository(pool);
 const interactionRepository = new PostgresNoteInteractionRepository(
@@ -24,6 +46,39 @@ const transformationRepository = new PostgresTransformationRepository(
   pool,
   noteRepository,
 );
+const oauthConnectionRepository = new PostgresOAuthConnectionRepository(
+  pool,
+  cipher,
+);
+const oauthStateRepository = new PostgresOAuthAuthorizationStateRepository(pool);
+const googleOAuthClient = new GoogleCalendarOAuthClient({
+  clientId: googleEnvironment.GOOGLE_CLIENT_ID,
+  clientSecret: googleEnvironment.GOOGLE_CLIENT_SECRET,
+  redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
+});
+const calendarConnections = new GoogleCalendarConnectionService(
+  oauthStateRepository,
+  oauthConnectionRepository,
+  googleOAuthClient,
+);
+const googleCalendar = new GoogleCalendarApiService(
+  oauthConnectionRepository,
+  googleOAuthClient,
+);
+const calendarContextResolver = new CalendarContextResolver(
+  noteRepository,
+  meetingRepository,
+  googleCalendar,
+);
+const callbackServer = new GoogleOAuthCallbackServer(
+  {
+    host: googleEnvironment.OAUTH_HTTP_HOST,
+    port: googleEnvironment.OAUTH_HTTP_PORT,
+    redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
+  },
+  calendarConnections,
+);
+
 const transformationModel = new OpenAITransformationModel(
   aiEnvironment.AI_API_KEY,
   aiEnvironment.AI_MODEL,
@@ -43,17 +98,23 @@ const app = createSlackApp(environment, {
   rawNoteCapturer,
   organizer,
   noteCards,
+  calendarContextResolver,
+  calendarConnections,
 });
 
 async function start(): Promise<void> {
   await pool.query("SELECT 1");
+  await callbackServer.start();
   await app.start();
-  console.log("Margin is connected to Slack, PostgreSQL, and note organization.");
+  console.log(
+    "Margin is connected to Slack, PostgreSQL, note organization, and Google OAuth.",
+  );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
   await app.stop();
+  await callbackServer.stop();
   await pool.end();
   process.exit(0);
 }
@@ -68,6 +129,7 @@ process.on("SIGTERM", () => {
 
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", error);
+  await callbackServer.stop().catch(() => undefined);
   await pool.end();
   process.exit(1);
 });

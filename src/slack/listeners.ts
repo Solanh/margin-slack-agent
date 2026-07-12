@@ -1,7 +1,12 @@
 import type { App } from "@slack/bolt";
+import type { CalendarContextResolver } from "../services/calendarContextResolver.js";
 import type { RawNoteCapturer } from "../services/captureRawNote.js";
+import type { GoogleCalendarConnectionService } from "../services/googleCalendarOAuth.js";
 import type { NoteCardService } from "../services/noteCard.js";
-import type { OrganizeNoteService } from "../services/organizeNote.js";
+import type {
+  OrganizeNoteInput,
+  OrganizeNoteService,
+} from "../services/organizeNote.js";
 import {
   buildCaptureFailureAcknowledgement,
 } from "./views/captureAcknowledgement.js";
@@ -36,6 +41,8 @@ export interface SlackListenerDependencies {
   rawNoteCapturer: RawNoteCapturer;
   organizer: OrganizeNoteService;
   noteCards: NoteCardService;
+  calendarContextResolver: CalendarContextResolver;
+  calendarConnections: GoogleCalendarConnectionService;
 }
 
 interface HandlePrivateNoteInput {
@@ -43,6 +50,7 @@ interface HandlePrivateNoteInput {
   message: UserTextMessage;
   capture: RawNoteCapturer["capture"];
   organize: OrganizeNoteService["organize"];
+  resolveCalendarContext: CalendarContextResolver["resolveForNote"];
   recordCardReference: NoteCardService["recordCardReference"];
   getCardData: NoteCardService["getCardData"];
   post: (message: SlackMessagePayload) => Promise<SlackPostResult>;
@@ -88,6 +96,13 @@ export function getWorkspaceId(body: unknown): string | null {
     return candidate.team_id;
   }
 
+  if (typeof candidate.team === "object" && candidate.team !== null) {
+    const teamId = (candidate.team as Record<string, unknown>).id;
+    if (typeof teamId === "string") {
+      return teamId;
+    }
+  }
+
   if (Array.isArray(candidate.authorizations)) {
     for (const authorization of candidate.authorizations) {
       if (typeof authorization !== "object" || authorization === null) {
@@ -109,6 +124,7 @@ export async function handlePrivateNoteMessage({
   message,
   capture,
   organize,
+  resolveCalendarContext,
   recordCardReference,
   getCardData,
   post,
@@ -179,13 +195,29 @@ export async function handlePrivateNoteMessage({
     logError("Unable to resolve user timezone; using UTC", error);
   }
 
+  let verifiedMeeting = null;
   try {
-    await organize({
+    const resolution = await resolveCalendarContext(
+      { workspaceId, userId: message.user },
+      rawNote.id,
+    );
+    verifiedMeeting = resolution.selected;
+  } catch (error) {
+    // Context is optional. Failures never block organization or card delivery.
+    logError("Calendar context resolution failed; continuing standalone", error);
+  }
+
+  try {
+    const organizeInput: OrganizeNoteInput = {
       workspaceId,
       userId: message.user,
       noteId: rawNote.id,
       userTimeZone: timeZone,
-    });
+    };
+    if (verifiedMeeting) {
+      organizeInput.verifiedMeeting = verifiedMeeting;
+    }
+    await organize(organizeInput);
   } catch (error) {
     // OrganizeNoteService normally returns a verbatim result; this protects the
     // card flow from unexpected programming or infrastructure failures.
@@ -216,15 +248,23 @@ export function registerSlackListeners(
   app: App,
   dependencies: SlackListenerDependencies,
 ): void {
-  app.event("app_home_opened", async ({ event, client, logger }) => {
+  app.event("app_home_opened", async ({ event, body, client, logger }) => {
     if (event.tab !== "home") {
       return;
     }
 
     try {
+      const workspaceId = getWorkspaceId(body);
+      const calendarConnected = workspaceId
+        ? await dependencies.calendarConnections.isConnected({
+            workspaceId,
+            userId: event.user,
+          })
+        : false;
+
       await client.views.publish({
         user_id: event.user,
-        view: buildMarginHomeView(),
+        view: buildMarginHomeView({ calendarConnected }),
       });
     } catch (error) {
       logger.error("Unable to publish Margin App Home", error);
@@ -232,8 +272,7 @@ export function registerSlackListeners(
   });
 
   app.event("app_context_changed", async ({ logger }) => {
-    // The context is intentionally not persisted until the context-resolution
-    // issue defines its retention and privacy behavior.
+    // Issue #7 evaluates and stores only minimal supported context signals.
     logger.debug("Slack Agent View context changed");
   });
 
@@ -258,6 +297,8 @@ export function registerSlackListeners(
       message,
       capture: (input) => dependencies.rawNoteCapturer.capture(input),
       organize: (input) => dependencies.organizer.organize(input),
+      resolveCalendarContext: (owner, noteId) =>
+        dependencies.calendarContextResolver.resolveForNote(owner, noteId),
       recordCardReference: (owner, noteId, reference) =>
         dependencies.noteCards.recordCardReference(owner, noteId, reference),
       getCardData: (owner, noteId) =>
