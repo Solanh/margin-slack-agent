@@ -38,8 +38,14 @@ function completeNote(overrides: Partial<Note> = {}): Note {
   };
 }
 
+const noCalendarContext = async () => ({
+  status: "not_connected" as const,
+  candidates: [],
+  selected: null,
+});
+
 describe("handlePrivateNoteMessage", () => {
-  it("posts one processing card and updates that same card after organization", async () => {
+  it("resolves optional context before organizing and updates one card", async () => {
     const order: string[] = [];
     const post = vi.fn(async () => {
       order.push("post");
@@ -69,8 +75,17 @@ describe("handlePrivateNoteMessage", () => {
         return completeNote({ organizedText: null, noteType: null });
       },
       resolveTimeZone: async () => "America/New_York",
-      organize: async () => {
+      resolveCalendarContext: async () => {
+        order.push("calendar");
+        return {
+          status: "no_candidates",
+          candidates: [],
+          selected: null,
+        };
+      },
+      organize: async (input) => {
         order.push("organize");
+        expect(input.verifiedMeeting).toBeUndefined();
         return {
           status: "organized",
           note: completeNote(),
@@ -98,6 +113,7 @@ describe("handlePrivateNoteMessage", () => {
       "capture",
       "post",
       "record-card",
+      "calendar",
       "organize",
       "load-card",
       "update",
@@ -111,9 +127,10 @@ describe("handlePrivateNoteMessage", () => {
     );
   });
 
-  it("reports a visible persistence failure without organizing", async () => {
+  it("reports a visible persistence failure without context or organization", async () => {
     const posts: string[] = [];
     const organize = vi.fn();
+    const resolveCalendarContext = vi.fn();
     const logError = vi.fn();
 
     await handlePrivateNoteMessage({
@@ -124,6 +141,7 @@ describe("handlePrivateNoteMessage", () => {
       },
       recordCardReference: vi.fn(),
       resolveTimeZone: async () => "UTC",
+      resolveCalendarContext,
       organize,
       getCardData: vi.fn(),
       post: async (response) => {
@@ -135,12 +153,55 @@ describe("handlePrivateNoteMessage", () => {
     });
 
     expect(posts).toEqual(["Margin could not save this note."]);
+    expect(resolveCalendarContext).not.toHaveBeenCalled();
     expect(organize).not.toHaveBeenCalled();
     expect(logError).toHaveBeenCalledWith(
       "Unable to persist raw note",
       expect.any(Error),
     );
     expect(JSON.stringify(logError.mock.calls)).not.toContain(message.text);
+  });
+
+  it("continues standalone when Calendar resolution fails", async () => {
+    const organize = vi.fn(async () => ({
+      status: "verbatim" as const,
+      note: completeNote({ organizedText: null, noteType: null }),
+      reason: "provider_failure" as const,
+    }));
+    const logError = vi.fn();
+
+    await handlePrivateNoteMessage({
+      workspaceId: "T123",
+      message,
+      capture: async () => ({
+        id: noteId,
+        workspaceId: "T123",
+        userId: "U123",
+        sourceChannelId: "D123",
+        sourceMessageTs: "123.456",
+        rawText: message.text,
+        createdAt: new Date("2026-07-12T18:00:00.000Z"),
+      }),
+      recordCardReference: async () => completeNote(),
+      resolveTimeZone: async () => "UTC",
+      resolveCalendarContext: async () => {
+        throw new Error("Calendar unavailable");
+      },
+      organize,
+      getCardData: async () => ({
+        note: completeNote({ organizedText: null, noteType: null }),
+        meeting: null,
+      }),
+      post: async () => ({ channel: "D123", ts: "999.000" }),
+      update: vi.fn(),
+      logError,
+    });
+
+    expect(organize).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "Calendar context resolution failed; continuing standalone",
+      expect.any(Error),
+    );
   });
 
   it("does not duplicate the note when the processing card cannot be posted", async () => {
@@ -167,6 +228,7 @@ describe("handlePrivateNoteMessage", () => {
       capture,
       recordCardReference: vi.fn(),
       resolveTimeZone: async () => "UTC",
+      resolveCalendarContext: noCalendarContext,
       organize,
       getCardData: vi.fn(),
       post: async () => {
