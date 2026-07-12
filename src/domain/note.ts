@@ -16,6 +16,7 @@ export const PrioritySchema = z.enum([
 ]);
 
 export const NoteStatusSchema = z.enum(["open", "resolved", "archived"]);
+export const DisplayModeSchema = z.enum(["organized", "verbatim"]);
 
 export const ContextConfidenceSchema = z.enum([
   "exact",
@@ -114,6 +115,7 @@ export interface Note extends RawNote {
   noteType: z.infer<typeof NoteTypeSchema> | null;
   priority: z.infer<typeof PrioritySchema>;
   status: z.infer<typeof NoteStatusSchema>;
+  displayMode: z.infer<typeof DisplayModeSchema>;
   meetingId: string | null;
   contextConfidence: z.infer<typeof ContextConfidenceSchema>;
   reminderIntent: string | null;
@@ -121,6 +123,8 @@ export interface Note extends RawNote {
   inferredFields: InferredField[];
   uncertainties: string[];
   transformationVersion: string | null;
+  cardChannelId: string | null;
+  cardMessageTs: string | null;
   updatedAt: Date;
 }
 
@@ -132,6 +136,7 @@ export interface NoteRevision extends OwnerScope {
   noteType: z.infer<typeof NoteTypeSchema> | null;
   priority: z.infer<typeof PrioritySchema> | null;
   status: z.infer<typeof NoteStatusSchema> | null;
+  displayMode: z.infer<typeof DisplayModeSchema>;
   reminderIntent: string | null;
   explicitDueAt: Date | null;
   transformationVersion: string | null;

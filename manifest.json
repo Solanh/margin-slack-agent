@@ -38,7 +38,8 @@
       "bot": [
         "assistant:write",
         "chat:write",
-        "im:history"
+        "im:history",
+        "users:read"
       ]
     }
   },

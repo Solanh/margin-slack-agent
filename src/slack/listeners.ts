@@ -1,10 +1,17 @@
 import type { App } from "@slack/bolt";
 import type { RawNoteCapturer } from "../services/captureRawNote.js";
+import type { NoteCardService } from "../services/noteCard.js";
+import type { OrganizeNoteService } from "../services/organizeNote.js";
 import {
-  buildCaptureAcknowledgement,
   buildCaptureFailureAcknowledgement,
 } from "./views/captureAcknowledgement.js";
 import { buildMarginHomeView } from "./views/home.js";
+import {
+  buildNoteCardBlocks,
+  buildNoteCardFallbackText,
+  buildProcessingNoteBlocks,
+  type SlackBlock,
+} from "./views/noteCard.js";
 
 interface UserTextMessage {
   channel: string;
@@ -14,21 +21,38 @@ interface UserTextMessage {
   user: string;
 }
 
-interface SlackReply {
+interface SlackMessagePayload {
   text: string;
-  blocks: ReturnType<typeof buildCaptureAcknowledgement>;
-  thread_ts: string;
+  blocks: SlackBlock[];
+  thread_ts?: string;
+}
+
+interface SlackPostResult {
+  channel?: string;
+  ts?: string;
 }
 
 export interface SlackListenerDependencies {
   rawNoteCapturer: RawNoteCapturer;
+  organizer: OrganizeNoteService;
+  noteCards: NoteCardService;
 }
 
 interface HandlePrivateNoteInput {
   workspaceId: string;
   message: UserTextMessage;
   capture: RawNoteCapturer["capture"];
-  reply: (message: SlackReply) => Promise<unknown>;
+  organize: OrganizeNoteService["organize"];
+  recordCardReference: NoteCardService["recordCardReference"];
+  getCardData: NoteCardService["getCardData"];
+  post: (message: SlackMessagePayload) => Promise<SlackPostResult>;
+  update: (message: {
+    channel: string;
+    ts: string;
+    text: string;
+    blocks: SlackBlock[];
+  }) => Promise<unknown>;
+  resolveTimeZone: () => Promise<string>;
   logError: (message: string, error?: unknown) => void;
 }
 
@@ -43,6 +67,7 @@ export function isUserTextMessage(message: unknown): message is UserTextMessage 
 
   return (
     typeof candidate.channel === "string" &&
+    candidate.channel.startsWith("D") &&
     typeof candidate.text === "string" &&
     candidate.text.trim().length > 0 &&
     typeof candidate.ts === "string" &&
@@ -83,11 +108,17 @@ export async function handlePrivateNoteMessage({
   workspaceId,
   message,
   capture,
-  reply,
+  organize,
+  recordCardReference,
+  getCardData,
+  post,
+  update,
+  resolveTimeZone,
   logError,
 }: HandlePrivateNoteInput): Promise<void> {
+  let rawNote;
   try {
-    await capture({
+    rawNote = await capture({
       workspaceId,
       userId: message.user,
       sourceChannelId: message.channel,
@@ -98,7 +129,7 @@ export async function handlePrivateNoteMessage({
     logError("Unable to persist raw note", error);
 
     try {
-      await reply({
+      await post({
         text: "Margin could not save this note.",
         blocks: buildCaptureFailureAcknowledgement(),
         thread_ts: message.thread_ts ?? message.ts,
@@ -112,14 +143,72 @@ export async function handlePrivateNoteMessage({
     return;
   }
 
+  let cardLocation: { channel: string; ts: string } | null = null;
   try {
-    await reply({
-      text: "Margin saved your note privately and preserved the original.",
-      blocks: buildCaptureAcknowledgement(),
+    const response = await post({
+      text: "Margin saved your note privately and is organizing it.",
+      blocks: buildProcessingNoteBlocks(rawNote.rawText),
       thread_ts: message.thread_ts ?? message.ts,
     });
+    if (
+      typeof response.channel === "string" &&
+      response.channel.startsWith("D") &&
+      typeof response.ts === "string"
+    ) {
+      cardLocation = { channel: response.channel, ts: response.ts };
+      try {
+        await recordCardReference(
+          { workspaceId, userId: message.user },
+          rawNote.id,
+          { channelId: response.channel, messageTs: response.ts },
+        );
+      } catch (error) {
+        logError("Note saved, but card reference could not be stored", error);
+      }
+    } else {
+      logError("Slack did not return a private note-card location");
+    }
   } catch (error) {
-    logError("Raw note saved, but acknowledgement failed", error);
+    logError("Raw note saved, but processing card could not be posted", error);
+  }
+
+  let timeZone = "UTC";
+  try {
+    timeZone = await resolveTimeZone();
+  } catch (error) {
+    logError("Unable to resolve user timezone; using UTC", error);
+  }
+
+  try {
+    await organize({
+      workspaceId,
+      userId: message.user,
+      noteId: rawNote.id,
+      userTimeZone: timeZone,
+    });
+  } catch (error) {
+    // OrganizeNoteService normally returns a verbatim result; this protects the
+    // card flow from unexpected programming or infrastructure failures.
+    logError("Unexpected note organization failure", error);
+  }
+
+  if (!cardLocation) {
+    return;
+  }
+
+  try {
+    const data = await getCardData(
+      { workspaceId, userId: message.user },
+      rawNote.id,
+    );
+    await update({
+      channel: cardLocation.channel,
+      ts: cardLocation.ts,
+      text: buildNoteCardFallbackText(data),
+      blocks: buildNoteCardBlocks(data, timeZone),
+    });
+  } catch (error) {
+    logError("Unable to update the saved note card", error);
   }
 }
 
@@ -148,7 +237,7 @@ export function registerSlackListeners(
     logger.debug("Slack Agent View context changed");
   });
 
-  app.message(async ({ message, body, say, logger }) => {
+  app.message(async ({ message, body, say, client, logger }) => {
     if (!isUserTextMessage(message)) {
       return;
     }
@@ -168,7 +257,21 @@ export function registerSlackListeners(
       workspaceId,
       message,
       capture: (input) => dependencies.rawNoteCapturer.capture(input),
-      reply: (response) => say(response),
+      organize: (input) => dependencies.organizer.organize(input),
+      recordCardReference: (owner, noteId, reference) =>
+        dependencies.noteCards.recordCardReference(owner, noteId, reference),
+      getCardData: (owner, noteId) =>
+        dependencies.noteCards.getCardData(owner, noteId),
+      post: (response) => say(response as never) as Promise<SlackPostResult>,
+      update: (response) => client.chat.update(response as never),
+      resolveTimeZone: async () => {
+        try {
+          const response = await client.users.info({ user: message.user });
+          return response.user?.tz ?? "UTC";
+        } catch {
+          return "UTC";
+        }
+      },
       logError: (description, error) => logger.error(description, error),
     });
   });

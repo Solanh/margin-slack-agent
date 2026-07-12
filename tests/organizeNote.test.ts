@@ -18,6 +18,7 @@ const rawNote: Note = {
   noteType: null,
   priority: "normal",
   status: "open",
+  displayMode: "organized",
   meetingId: null,
   contextConfidence: "unresolved",
   reminderIntent: null,
@@ -25,6 +26,8 @@ const rawNote: Note = {
   inferredFields: [],
   uncertainties: [],
   transformationVersion: null,
+  cardChannelId: null,
+  cardMessageTs: null,
   createdAt: new Date("2026-07-12T18:00:00.000Z"),
   updatedAt: new Date("2026-07-12T18:00:00.000Z"),
 };
@@ -162,7 +165,11 @@ describe("OrganizeNoteService", () => {
     const service = new OrganizeNoteService(
       noteRepository(),
       transformations,
-      { async transform() { return validTransformation; } },
+      {
+        async transform() {
+          return validTransformation;
+        },
+      },
     );
 
     const result = await service.organize({

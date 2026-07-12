@@ -1,5 +1,6 @@
 import type {
   InferredField,
+  MeetingContext,
   Note,
   NoteRevision,
   OwnerScope,
@@ -18,6 +19,7 @@ export interface SaveDerivedNoteInput {
   noteType: Note["noteType"];
   priority: Note["priority"];
   status: Note["status"];
+  displayMode: Note["displayMode"];
   contextConfidence: Note["contextConfidence"];
   reminderIntent: Note["reminderIntent"];
   explicitDueAt: Note["explicitDueAt"];
@@ -33,6 +35,7 @@ export interface CreateRevisionInput extends OwnerScope {
   noteType: NoteRevision["noteType"];
   priority: NoteRevision["priority"];
   status: NoteRevision["status"];
+  displayMode: NoteRevision["displayMode"];
   reminderIntent: NoteRevision["reminderIntent"];
   explicitDueAt: NoteRevision["explicitDueAt"];
   transformationVersion: NoteRevision["transformationVersion"];
@@ -44,6 +47,27 @@ export interface ApplyTransformationInput extends OwnerScope {
   noteId: string;
   transformation: Transformation;
   transformationVersion: string;
+}
+
+export interface NoteCardReference {
+  channelId: string;
+  messageTs: string;
+}
+
+export interface UserNotePatch {
+  organizedText?: string | undefined;
+  priority?: Note["priority"] | undefined;
+  displayMode?: Note["displayMode"] | undefined;
+  reminderIntent?: string | null | undefined;
+  explicitDueAt?: Date | null | undefined;
+  meetingId?: string | null | undefined;
+  contextConfidence?: Note["contextConfidence"] | undefined;
+  removeInferredFields?: InferredField[] | undefined;
+}
+
+export interface ApplyUserNotePatchInput extends OwnerScope {
+  noteId: string;
+  patch: UserNotePatch;
 }
 
 export interface RawNoteRepository {
@@ -70,4 +94,19 @@ export interface NoteRepository extends RawNoteRepository {
 
 export interface TransformationRepository {
   applyTransformation(input: ApplyTransformationInput): Promise<Note>;
+}
+
+export interface NoteInteractionRepository {
+  setCardReference(
+    owner: OwnerScope,
+    noteId: string,
+    reference: NoteCardReference,
+  ): Promise<Note>;
+
+  applyUserPatch(input: ApplyUserNotePatchInput): Promise<Note>;
+}
+
+export interface NoteCardData {
+  note: Note;
+  meeting: MeetingContext | null;
 }

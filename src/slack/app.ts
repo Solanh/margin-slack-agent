@@ -1,7 +1,10 @@
 import { App, LogLevel } from "@slack/bolt";
 import type { Environment } from "../config.js";
-import type { RawNoteCapturer } from "../services/captureRawNote.js";
-import { registerSlackListeners } from "./listeners.js";
+import { registerNoteCardActions } from "./noteCardActions.js";
+import {
+  registerSlackListeners,
+  type SlackListenerDependencies,
+} from "./listeners.js";
 
 function toSlackLogLevel(level: Environment["LOG_LEVEL"]): LogLevel {
   switch (level) {
@@ -19,7 +22,7 @@ function toSlackLogLevel(level: Environment["LOG_LEVEL"]): LogLevel {
 
 export function createSlackApp(
   environment: Environment,
-  rawNoteCapturer: RawNoteCapturer,
+  dependencies: SlackListenerDependencies,
 ): App {
   const app = new App({
     token: environment.SLACK_BOT_TOKEN,
@@ -29,7 +32,8 @@ export function createSlackApp(
     logLevel: toSlackLogLevel(environment.LOG_LEVEL),
   });
 
-  registerSlackListeners(app, { rawNoteCapturer });
+  registerSlackListeners(app, dependencies);
+  registerNoteCardActions(app, dependencies.noteCards);
 
   return app;
 }
