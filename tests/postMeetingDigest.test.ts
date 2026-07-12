@@ -149,7 +149,7 @@ describe("post-meeting digest", () => {
       new Date("2026-07-12T18:31:00.000Z"),
     );
 
-    expect(result).toEqual({ prepared: 1, claimed: 1, delivered: 1, failed: 0 });
+    expect(result).toEqual({ prepared: 1, claimed: 1, delivered: 0, failed: 0 });
     expect(client.chat.postMessage).not.toHaveBeenCalled();
     expect(storage.markFailed).toHaveBeenCalledWith(
       { workspaceId: "T123", userId: "U123" },
