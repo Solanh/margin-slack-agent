@@ -15,6 +15,7 @@ export function registerCalendarActions(
       try {
         const workspaceId = getWorkspaceId(body);
         const userId = body.user.id;
+        const triggerId = getTriggerId(body);
         if (!workspaceId || !userId) {
           throw new Error("Slack Calendar action is missing owner context");
         }
@@ -24,7 +25,7 @@ export function registerCalendarActions(
           userId,
         });
         await client.views.open({
-          trigger_id: body.trigger_id,
+          trigger_id: triggerId,
           view: buildCalendarAuthorizationModal(authorizationUrl),
         });
       } catch (error) {
@@ -70,4 +71,17 @@ export function registerCalendarActions(
       }
     },
   );
+}
+
+function getTriggerId(body: unknown): string {
+  if (typeof body !== "object" || body === null) {
+    throw new Error("Slack Calendar action is missing a trigger ID");
+  }
+
+  const triggerId = (body as Record<string, unknown>).trigger_id;
+  if (typeof triggerId !== "string" || !triggerId) {
+    throw new Error("Slack Calendar action is missing a trigger ID");
+  }
+
+  return triggerId;
 }
