@@ -23,7 +23,9 @@ const note: Note = {
   status: "open",
   displayMode: "organized",
   meetingId: null,
+  contextSource: "standalone",
   contextConfidence: "unresolved",
+  contextResolutionStatus: "standalone",
   reminderIntent: null,
   explicitDueAt: null,
   inferredFields: [],
@@ -49,7 +51,9 @@ function setup(events: Array<{
     setMeetingContext: vi.fn(async (input) => ({
       ...note,
       meetingId: input.meetingId,
+      contextSource: input.contextSource ?? "google_calendar",
       contextConfidence: input.contextConfidence,
+      contextResolutionStatus: "attached",
     })),
     appendRevision: vi.fn(),
   };
