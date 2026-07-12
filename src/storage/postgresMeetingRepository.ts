@@ -90,7 +90,7 @@ export class PostgresMeetingRepository implements MeetingRepository {
   constructor(private readonly pool: Pick<Pool, "query">) {}
 
   async save(input: SaveMeetingInput): Promise<MeetingContext> {
-    if (input.endsAt <= input.startsAt) {
+    if (input.endsAt.getTime() <= input.startsAt.getTime()) {
       throw new Error("Meeting end time must be after its start time");
     }
 
