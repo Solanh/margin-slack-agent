@@ -1,11 +1,35 @@
-import type { Note, RawNote } from "../domain/note.js";
+import type {
+  Note,
+  NoteRevision,
+  OwnerScope,
+  RawNote,
+} from "../domain/note.js";
 
-export interface CreateRawNoteInput {
-  workspaceId: string;
-  userId: string;
+export interface CreateRawNoteInput extends OwnerScope {
   sourceChannelId: string;
   sourceMessageTs: string;
   rawText: string;
+}
+
+export interface SaveDerivedNoteInput {
+  organizedText: Note["organizedText"];
+  noteType: Note["noteType"];
+  priority: Note["priority"];
+  status: Note["status"];
+  contextConfidence: Note["contextConfidence"];
+  transformationVersion: Note["transformationVersion"];
+}
+
+export interface CreateRevisionInput extends OwnerScope {
+  noteId: string;
+  revisionSource: NoteRevision["revisionSource"];
+  organizedText: NoteRevision["organizedText"];
+  noteType: NoteRevision["noteType"];
+  priority: NoteRevision["priority"];
+  status: NoteRevision["status"];
+  transformationVersion: NoteRevision["transformationVersion"];
+  inferredFields: string[];
+  uncertainties: string[];
 }
 
 export interface RawNoteRepository {
@@ -19,13 +43,13 @@ export interface RawNoteRepository {
 }
 
 export interface NoteRepository extends RawNoteRepository {
-  getById(id: string): Promise<Note | null>;
+  getById(owner: OwnerScope, id: string): Promise<Note | null>;
 
   saveDerived(
+    owner: OwnerScope,
     id: string,
-    update: Pick<
-      Note,
-      "organizedText" | "noteType" | "priority" | "transformationVersion"
-    >,
+    update: SaveDerivedNoteInput,
   ): Promise<Note>;
+
+  appendRevision(input: CreateRevisionInput): Promise<NoteRevision>;
 }
