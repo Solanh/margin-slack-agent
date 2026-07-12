@@ -20,7 +20,9 @@ interface MutableNoteRow extends QueryResultRow {
   inferred_fields: unknown;
   uncertainties: unknown;
   meeting_id: string | null;
+  context_source: Note["contextSource"];
   context_confidence: Note["contextConfidence"];
+  context_resolution_status: Note["contextResolutionStatus"];
 }
 
 const SET_CARD_REFERENCE_SQL = `
@@ -45,7 +47,9 @@ const LOCK_NOTE_SQL = `
     inferred_fields,
     uncertainties,
     meeting_id,
-    context_confidence
+    context_source,
+    context_confidence,
+    context_resolution_status
   FROM notes
   WHERE id = $1
     AND workspace_id = $2
@@ -61,8 +65,10 @@ const UPDATE_NOTE_SQL = `
       reminder_intent = $7,
       explicit_due_at = $8,
       meeting_id = $9,
-      context_confidence = $10,
-      inferred_fields = $11
+      context_source = $10,
+      context_confidence = $11,
+      context_resolution_status = $12,
+      inferred_fields = $13
   WHERE id = $1
     AND workspace_id = $2
     AND user_id = $3
@@ -165,8 +171,13 @@ export class PostgresNoteInteractionRepository
         input.patch.meetingId !== undefined
           ? input.patch.meetingId
           : current.meeting_id;
+      const contextSource =
+        input.patch.contextSource ?? current.context_source;
       const contextConfidence =
         input.patch.contextConfidence ?? current.context_confidence;
+      const contextResolutionStatus =
+        input.patch.contextResolutionStatus ??
+        current.context_resolution_status;
       const serializedInferredFields = JSON.stringify(inferredFields);
       const serializedUncertainties = JSON.stringify(
         this.stringArray(current.uncertainties),
@@ -182,7 +193,9 @@ export class PostgresNoteInteractionRepository
         reminderIntent,
         explicitDueAt,
         meetingId,
+        contextSource,
         contextConfidence,
+        contextResolutionStatus,
         serializedInferredFields,
       ]);
 
