@@ -5,7 +5,8 @@ import {
   loadEnvironment,
   loadGoogleEnvironment,
 } from "./config.js";
-import { GoogleOAuthCallbackServer } from "./http/googleOAuthCallbackServer.js";
+import { ApplicationHttpServer } from "./http/applicationHttpServer.js";
+import { RuntimeReadiness } from "./http/readiness.js";
 import { AesGcmTokenCipher } from "./security/tokenCipher.js";
 import { CaptureRawNoteService } from "./services/captureRawNote.js";
 import { ContextResolutionService } from "./services/contextResolution.js";
@@ -22,6 +23,7 @@ import { PostMeetingDigestService } from "./services/postMeetingDigest.js";
 import { PreMeetingResurfacingService } from "./services/preMeetingResurfacing.js";
 import { SlackContextSignalService } from "./services/slackContextSignals.js";
 import { createSlackApp } from "./slack/app.js";
+import { getMigrationStatus } from "./storage/migrationStatus.js";
 import { createPostgresPool } from "./storage/postgres.js";
 import { PostgresContextCandidateRepository } from "./storage/postgresContextCandidateRepository.js";
 import { PostgresMeetingRepository } from "./storage/postgresMeetingRepository.js";
@@ -76,7 +78,6 @@ const slackContextSignals = new SlackContextSignalService(
 
 let calendarConnections: GoogleCalendarConnectionService;
 let googleCalendar: GoogleCalendarApiService;
-let callbackServer: GoogleOAuthCallbackServer | null = null;
 
 if (googleEnvironment.enabled) {
   const googleOAuthClient = new GoogleCalendarOAuthClient({
@@ -92,14 +93,6 @@ if (googleEnvironment.enabled) {
   googleCalendar = new GoogleCalendarApiService(
     oauthConnectionRepository,
     googleOAuthClient,
-  );
-  callbackServer = new GoogleOAuthCallbackServer(
-    {
-      host: googleEnvironment.OAUTH_HTTP_HOST,
-      port: googleEnvironment.OAUTH_HTTP_PORT,
-      redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
-    },
-    calendarConnections,
   );
 } else {
   calendarConnections = GoogleCalendarConnectionService.disabled();
@@ -150,31 +143,62 @@ const resurfacingWorker = googleEnvironment.enabled
       app.client,
     )
   : null;
+const readiness = new RuntimeReadiness({
+  checkDatabase: async () => {
+    await pool.query("SELECT 1");
+    return true;
+  },
+  checkMigrations: async () => (await getMigrationStatus(pool)).current,
+  resurfacingRequired: googleEnvironment.enabled,
+});
+const httpServer = new ApplicationHttpServer({
+  host: environment.HTTP_HOST,
+  port: environment.HTTP_PORT,
+  readiness,
+  ...(googleEnvironment.enabled
+    ? {
+        googleCalendar: {
+          redirectUri: googleEnvironment.GOOGLE_REDIRECT_URI,
+          connections: calendarConnections,
+        },
+      }
+    : {}),
+});
 
 async function start(): Promise<void> {
+  await httpServer.start();
   await pool.query("SELECT 1");
-  await slackContextSignals.deleteExpired();
-  if (callbackServer) {
-    await callbackServer.start();
+  const migrationStatus = await getMigrationStatus(pool);
+  if (!migrationStatus.current) {
+    throw new Error(
+      `Database migrations are not current. Pending: ${migrationStatus.pending.join(", ") || "none"}; unexpected: ${migrationStatus.unexpected.join(", ") || "none"}.`,
+    );
   }
+  await slackContextSignals.deleteExpired();
   await app.start();
+  readiness.markSlackStarted();
   digestWorker.start();
-  resurfacingWorker?.start();
+  readiness.markDigestWorkerStarted();
+  if (resurfacingWorker) {
+    resurfacingWorker.start();
+    readiness.markResurfacingWorkerStarted();
+  }
   console.log(
     googleEnvironment.enabled
-      ? "Margin is connected to Slack, PostgreSQL, private note retrieval, scored context resolution, post-meeting digests, pre-meeting resurfacing, note organization, and Google OAuth."
-      : "Margin is connected to Slack, PostgreSQL, private note retrieval, Slack context resolution, post-meeting digests, and note organization. Google Calendar integration is disabled.",
+      ? "Margin is ready with Slack, PostgreSQL, workers, private note retrieval, scored context resolution, note organization, and Google Calendar."
+      : "Margin is ready with Slack, PostgreSQL, workers, private note retrieval, Slack context resolution, and note organization. Google Calendar integration is disabled.",
   );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
   resurfacingWorker?.stop();
+  readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
+  readiness.markDigestWorkerStopped();
   await app.stop();
-  if (callbackServer) {
-    await callbackServer.stop();
-  }
+  readiness.markSlackStopped();
+  await httpServer.stop();
   await pool.end();
   process.exit(0);
 }
@@ -190,10 +214,11 @@ process.on("SIGTERM", () => {
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", error);
   resurfacingWorker?.stop();
+  readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
-  if (callbackServer) {
-    await callbackServer.stop().catch(() => undefined);
-  }
+  readiness.markDigestWorkerStopped();
+  readiness.markSlackStopped();
+  await httpServer.stop().catch(() => undefined);
   await pool.end();
   process.exit(1);
 });
