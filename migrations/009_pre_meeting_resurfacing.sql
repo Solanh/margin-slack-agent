@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS meeting_series_preferences (
 CREATE TABLE IF NOT EXISTS pre_meeting_resurfacings (
   id UUID PRIMARY KEY,
   upcoming_meeting_id UUID NOT NULL,
+  prior_meeting_id UUID NOT NULL,
   workspace_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   series_key TEXT NOT NULL,
@@ -33,12 +34,18 @@ CREATE TABLE IF NOT EXISTS pre_meeting_resurfacings (
   last_error_code TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT pre_meeting_resurfacings_meeting_owner_fk
+  CONSTRAINT pre_meeting_resurfacings_upcoming_owner_fk
     FOREIGN KEY (upcoming_meeting_id, workspace_id, user_id)
+    REFERENCES meetings (id, workspace_id, user_id)
+    ON DELETE CASCADE,
+  CONSTRAINT pre_meeting_resurfacings_prior_owner_fk
+    FOREIGN KEY (prior_meeting_id, workspace_id, user_id)
     REFERENCES meetings (id, workspace_id, user_id)
     ON DELETE CASCADE,
   CONSTRAINT pre_meeting_resurfacings_owner_event_unique
     UNIQUE (upcoming_meeting_id, workspace_id, user_id),
+  CONSTRAINT pre_meeting_resurfacings_distinct_meetings
+    CHECK (prior_meeting_id <> upcoming_meeting_id),
   CONSTRAINT pre_meeting_resurfacings_slack_reference_shape CHECK (
     (slack_channel_id IS NULL AND slack_message_ts IS NULL)
     OR
