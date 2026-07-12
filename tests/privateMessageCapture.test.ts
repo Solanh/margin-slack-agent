@@ -24,7 +24,9 @@ function completeNote(overrides: Partial<Note> = {}): Note {
     status: "open",
     displayMode: "organized",
     meetingId: null,
+    contextSource: "standalone",
     contextConfidence: "unresolved",
+    contextResolutionStatus: "standalone",
     reminderIntent: null,
     explicitDueAt: null,
     inferredFields: ["organizedText", "noteType", "priority"],
@@ -53,18 +55,6 @@ const huddleMeeting: MeetingContext = {
   updatedAt: new Date("2026-07-12T18:00:00.000Z"),
 };
 
-const noCalendarContext = async () => ({
-  status: "not_connected" as const,
-  candidates: [],
-  selected: null,
-});
-
-const noHuddleContext = async () => ({
-  status: "no_active_huddle" as const,
-  selected: null,
-  activeView: null,
-});
-
 function capturedRawNote() {
   return {
     id: noteId,
@@ -77,15 +67,28 @@ function capturedRawNote() {
   };
 }
 
+const standaloneResolution = async () => ({
+  status: "standalone" as const,
+  note: completeNote(),
+  candidates: [],
+  selectedMeeting: null,
+  activeView: null,
+});
+
 describe("handlePrivateNoteMessage", () => {
-  it("refreshes Slack signals and lets an active huddle override Calendar context", async () => {
+  it("refreshes Slack signals, resolves context once, and organizes with the selected meeting", async () => {
     const order: string[] = [];
     const organize = vi.fn(async (input) => {
       order.push("organize");
       expect(input.verifiedMeeting).toEqual(huddleMeeting);
       return {
         status: "organized" as const,
-        note: completeNote({ meetingId: huddleMeeting.id }),
+        note: completeNote({
+          meetingId: huddleMeeting.id,
+          contextSource: "slack_huddle",
+          contextConfidence: "exact",
+          contextResolutionStatus: "attached",
+        }),
         transformation: {
           organizedText: "Remember the exact thing.",
           noteType: "reference" as const,
@@ -117,19 +120,18 @@ describe("handlePrivateNoteMessage", () => {
         order.push("slack-signals");
       },
       resolveTimeZone: async () => "America/New_York",
-      resolveCalendarContext: async () => {
-        order.push("calendar");
+      resolveContext: async () => {
+        order.push("context");
         return {
           status: "attached" as const,
+          note: completeNote({
+            meetingId: huddleMeeting.id,
+            contextSource: "slack_huddle",
+            contextConfidence: "exact",
+            contextResolutionStatus: "attached",
+          }),
           candidates: [],
-          selected: null,
-        };
-      },
-      resolveSlackHuddleContext: async () => {
-        order.push("huddle");
-        return {
-          status: "attached" as const,
-          selected: huddleMeeting,
+          selectedMeeting: huddleMeeting,
           activeView: null,
         };
       },
@@ -137,8 +139,14 @@ describe("handlePrivateNoteMessage", () => {
       getCardData: async () => {
         order.push("load-card");
         return {
-          note: completeNote({ meetingId: huddleMeeting.id }),
+          note: completeNote({
+            meetingId: huddleMeeting.id,
+            contextSource: "slack_huddle",
+            contextConfidence: "exact",
+            contextResolutionStatus: "attached",
+          }),
           meeting: huddleMeeting,
+          contextCandidates: [],
         };
       },
       post: async () => {
@@ -156,8 +164,7 @@ describe("handlePrivateNoteMessage", () => {
       "post",
       "record-card",
       "slack-signals",
-      "calendar",
-      "huddle",
+      "context",
       "organize",
       "load-card",
       "update",
@@ -168,8 +175,7 @@ describe("handlePrivateNoteMessage", () => {
   it("reports persistence failure before any context work", async () => {
     const posts: string[] = [];
     const refreshSlackSignals = vi.fn();
-    const resolveCalendarContext = vi.fn();
-    const resolveSlackHuddleContext = vi.fn();
+    const resolveContext = vi.fn();
     const organize = vi.fn();
 
     await handlePrivateNoteMessage({
@@ -181,8 +187,7 @@ describe("handlePrivateNoteMessage", () => {
       recordCardReference: vi.fn(),
       refreshSlackSignals,
       resolveTimeZone: async () => "UTC",
-      resolveCalendarContext,
-      resolveSlackHuddleContext,
+      resolveContext,
       organize,
       getCardData: vi.fn(),
       post: async (response) => {
@@ -195,12 +200,11 @@ describe("handlePrivateNoteMessage", () => {
 
     expect(posts).toEqual(["Margin could not save this note."]);
     expect(refreshSlackSignals).not.toHaveBeenCalled();
-    expect(resolveCalendarContext).not.toHaveBeenCalled();
-    expect(resolveSlackHuddleContext).not.toHaveBeenCalled();
+    expect(resolveContext).not.toHaveBeenCalled();
     expect(organize).not.toHaveBeenCalled();
   });
 
-  it("continues standalone when Slack and Calendar metadata are missing", async () => {
+  it("continues standalone when no meeting context is selected", async () => {
     const organize = vi.fn(async (input) => {
       expect(input.verifiedMeeting).toBeUndefined();
       return {
@@ -217,12 +221,12 @@ describe("handlePrivateNoteMessage", () => {
       recordCardReference: async () => completeNote(),
       refreshSlackSignals: async () => undefined,
       resolveTimeZone: async () => "UTC",
-      resolveCalendarContext: noCalendarContext,
-      resolveSlackHuddleContext: noHuddleContext,
+      resolveContext: standaloneResolution,
       organize,
       getCardData: async () => ({
         note: completeNote({ organizedText: null, noteType: null }),
         meeting: null,
+        contextCandidates: [],
       }),
       post: async () => ({ channel: "D123", ts: "999.000" }),
       update: vi.fn(),
@@ -249,12 +253,12 @@ describe("handlePrivateNoteMessage", () => {
         throw new Error("Slack profile unavailable");
       },
       resolveTimeZone: async () => "UTC",
-      resolveCalendarContext: noCalendarContext,
-      resolveSlackHuddleContext: noHuddleContext,
+      resolveContext: standaloneResolution,
       organize,
       getCardData: async () => ({
         note: completeNote({ organizedText: null, noteType: null }),
         meeting: null,
+        contextCandidates: [],
       }),
       post: async () => ({ channel: "D123", ts: "999.000" }),
       update: vi.fn(),
@@ -264,6 +268,45 @@ describe("handlePrivateNoteMessage", () => {
     expect(organize).toHaveBeenCalledTimes(1);
     expect(logError).toHaveBeenCalledWith(
       "Slack context signal refresh failed; continuing without it",
+      expect.any(Error),
+    );
+  });
+
+  it("continues organization when unified context resolution fails", async () => {
+    const organize = vi.fn(async (input) => {
+      expect(input.verifiedMeeting).toBeUndefined();
+      return {
+        status: "verbatim" as const,
+        note: completeNote({ organizedText: null, noteType: null }),
+        reason: "provider_failure" as const,
+      };
+    });
+    const logError = vi.fn();
+
+    await handlePrivateNoteMessage({
+      workspaceId: "T123",
+      message,
+      capture: async () => capturedRawNote(),
+      recordCardReference: async () => completeNote(),
+      refreshSlackSignals: async () => undefined,
+      resolveTimeZone: async () => "UTC",
+      resolveContext: async () => {
+        throw new Error("context database unavailable");
+      },
+      organize,
+      getCardData: async () => ({
+        note: completeNote({ organizedText: null, noteType: null }),
+        meeting: null,
+        contextCandidates: [],
+      }),
+      post: async () => ({ channel: "D123", ts: "999.000" }),
+      update: vi.fn(),
+      logError,
+    });
+
+    expect(organize).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "Context resolution failed; continuing standalone",
       expect.any(Error),
     );
   });
