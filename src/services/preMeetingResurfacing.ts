@@ -7,6 +7,7 @@ import type {
   PreMeetingResurfacingRepository,
 } from "../storage/preMeetingResurfacingRepository.js";
 import type { SlackMessageReference } from "../storage/postMeetingDigestRepository.js";
+import { nextDurableSlackRetryAt } from "../slack/slackApiExecutor.js";
 import {
   buildPreMeetingResurfacingBlocks,
   buildPreMeetingResurfacingFallback,
@@ -86,7 +87,7 @@ export class PreMeetingResurfacingService {
             ownerOf(resurfacing),
             resurfacing.id,
             safeErrorCode(error),
-            new Date(now.getTime() + retryDelayMs(resurfacing.attempts)),
+            nextDurableSlackRetryAt(error, now, resurfacing.attempts),
           );
         }
       }
@@ -207,11 +208,6 @@ function ownerOf(resurfacing: PreMeetingResurfacing): OwnerScope {
     workspaceId: resurfacing.workspaceId,
     userId: resurfacing.userId,
   };
-}
-
-function retryDelayMs(attempts: number): number {
-  const exponent = Math.max(0, Math.min(6, attempts - 1));
-  return Math.min(60 * 60 * 1000, 60_000 * 2 ** exponent);
 }
 
 function safeErrorCode(error: unknown): string {
