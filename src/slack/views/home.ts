@@ -1,38 +1,11 @@
 export interface MarginHomeViewState {
+  calendarAvailable: boolean;
   calendarConnected: boolean;
 }
 
 export function buildMarginHomeView(state: MarginHomeViewState) {
-  return {
-    type: "home" as const,
-    blocks: [
-      {
-        type: "header" as const,
-        text: {
-          type: "plain_text" as const,
-          text: "Margin",
-        },
-      },
-      {
-        type: "section" as const,
-        text: {
-          type: "mrkdwn" as const,
-          text: "*Your private margin notes for meetings.*\nSend Margin a direct message whenever something is worth remembering.",
-        },
-      },
-      {
-        type: "context" as const,
-        elements: [
-          {
-            type: "mrkdwn" as const,
-            text: ":lock: Notes are private by default. Margin does not record or transcribe meetings.",
-          },
-        ],
-      },
-      {
-        type: "divider" as const,
-      },
-      {
+  const calendarSection = state.calendarAvailable
+    ? {
         type: "section" as const,
         text: {
           type: "mrkdwn" as const,
@@ -62,7 +35,45 @@ export function buildMarginHomeView(state: MarginHomeViewState) {
               text: { type: "plain_text" as const, text: "Connect Calendar" },
               style: "primary" as const,
             },
+      }
+    : {
+        type: "section" as const,
+        text: {
+          type: "mrkdwn" as const,
+          text: "*Google Calendar unavailable*\nThis Margin deployment was started without Google Calendar integration. Private note capture, Slack huddle context, retrieval, digests, and other non-Calendar features remain available.",
+        },
+      };
+
+  return {
+    type: "home" as const,
+    blocks: [
+      {
+        type: "header" as const,
+        text: {
+          type: "plain_text" as const,
+          text: "Margin",
+        },
       },
+      {
+        type: "section" as const,
+        text: {
+          type: "mrkdwn" as const,
+          text: "*Your private margin notes for meetings.*\nSend Margin a direct message whenever something is worth remembering.",
+        },
+      },
+      {
+        type: "context" as const,
+        elements: [
+          {
+            type: "mrkdwn" as const,
+            text: ":lock: Notes are private by default. Margin does not record or transcribe meetings.",
+          },
+        ],
+      },
+      {
+        type: "divider" as const,
+      },
+      calendarSection,
       {
         type: "divider" as const,
       },
