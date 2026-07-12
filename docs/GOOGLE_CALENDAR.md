@@ -1,6 +1,51 @@
 # Google Calendar Integration
 
-Margin uses Google Calendar only to identify events overlapping the moment a user captures a note.
+Google Calendar is optional. Margin can run as a private Slack note agent without any Google configuration; note capture, Slack huddle context, organization, retrieval, post-meeting digests, and other non-Calendar features remain available.
+
+## Disabled mode
+
+Set:
+
+```dotenv
+GOOGLE_CALENDAR_ENABLED=false
+```
+
+Then omit:
+
+```text
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI
+```
+
+When disabled:
+
+- the Google OAuth client is not created;
+- the OAuth callback server is not started;
+- the pre-meeting Calendar resurfacing worker is not started;
+- context resolution continues with Slack huddle and standalone candidates;
+- App Home displays **Google Calendar unavailable** and does not show a connect button.
+
+For backward compatibility, a complete set of Google credentials enables the integration even when `GOOGLE_CALENDAR_ENABLED` is omitted. Partial inferred or explicitly enabled configuration is rejected during startup.
+
+## Enabled mode
+
+Set:
+
+```dotenv
+GOOGLE_CALENDAR_ENABLED=true
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3000/oauth/google/calendar/callback
+OAUTH_HTTP_HOST=0.0.0.0
+OAUTH_HTTP_PORT=3000
+TOKEN_ENCRYPTION_KEY=...
+TOKEN_ENCRYPTION_KEY_VERSION=1
+```
+
+All three Google credential variables are required when Calendar is enabled.
+
+Margin uses Google Calendar only to identify events overlapping the moment a user captures a note and to find verified upcoming instances for resurfacing.
 
 ## Scope
 
@@ -37,18 +82,6 @@ Deployed example:
 
 ```text
 https://margin.example/oauth/google/calendar/callback
-```
-
-Set:
-
-```dotenv
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3000/oauth/google/calendar/callback
-OAUTH_HTTP_HOST=0.0.0.0
-OAUTH_HTTP_PORT=3000
-TOKEN_ENCRYPTION_KEY=...
-TOKEN_ENCRYPTION_KEY_VERSION=1
 ```
 
 Generate a development encryption key with:
@@ -88,7 +121,7 @@ For each captured note, Margin queries the primary calendar with:
 
 The partial-response `fields` parameter requests only:
 
-- event ID;
+- event ID and recurring-series identity;
 - summary/title;
 - status and event type;
 - start/end date-time;
@@ -107,24 +140,11 @@ Margin ignores:
 - events the authenticated user declined;
 - malformed or non-overlapping intervals.
 
-Every plausible event is normalized and stored as an owner-scoped meeting candidate.
-
-- One candidate: attach it automatically.
-- More than one candidate: attach none and show all candidates in the meeting picker.
-- No candidates, missing connection, or API failure: keep the note standalone.
-
-A candidate active at the exact capture timestamp receives `exact` confidence. A candidate found only through the five-minute tolerance receives `high` confidence.
+Every plausible event is normalized and stored as an owner-scoped meeting candidate. Multiple plausible events remain unresolved for user clarification rather than being selected arbitrarily. Missing, disabled, disconnected, or failed Calendar access leaves the note standalone unless another verified source such as Slack huddle state is available.
 
 ## Model boundary
 
-The transformation model receives only the selected meeting's:
-
-- title;
-- start time;
-- end time;
-- confidence.
-
-Attendee identifiers are not sent to the model. Calendar descriptions are never fetched.
+The transformation model receives only the selected meeting's title, start time, end time, and confidence. Attendee identifiers are not sent to the model. Calendar descriptions are never fetched.
 
 ## Refresh and disconnect
 
@@ -136,28 +156,30 @@ Disconnecting Calendar:
 2. deletes the local encrypted connection even when remote revocation cannot be confirmed;
 3. updates App Home to show Calendar as disconnected.
 
-Existing notes and their already-attached meeting records remain intact. New notes degrade to standalone capture.
+Existing notes and already-attached meeting records remain intact. New notes degrade to Slack or standalone context.
 
 ## Callback server
 
-The same application process starts a small HTTP server for:
-
-- the configured OAuth callback path;
-- `/healthz`.
-
-Callback responses use `no-store`, a restrictive Content Security Policy, `nosniff`, and `no-referrer`. Authorization codes and state values are not logged.
+When Calendar is enabled, Margin starts a small HTTP server for the configured OAuth callback path and `/healthz`. Callback responses use `no-store`, a restrictive Content Security Policy, `nosniff`, and `no-referrer`. Authorization codes and state values are not logged.
 
 For production, place the server behind HTTPS and configure the public HTTPS callback URL in Google Cloud.
 
 ## Verification
 
-1. Apply migrations through `005_google_calendar_oauth.sql`.
+### Disabled deployment
+
+1. Set `GOOGLE_CALENDAR_ENABLED=false` and remove Google credentials.
 2. Start Margin.
-3. Open App Home and select **Connect Calendar**.
-4. Confirm the consent page requests read-only Calendar event access.
-5. Complete authorization and reopen App Home.
-6. Capture a note during a calendar event.
-7. Confirm the event appears as verified context.
-8. Create two overlapping events and confirm Margin does not choose arbitrarily.
-9. Disconnect Calendar and confirm encrypted credentials are deleted.
-10. Capture another note and confirm standalone operation still works.
+3. Confirm App Home says Calendar is unavailable.
+4. Capture, edit, and retrieve a note.
+5. Confirm the note is stored and organized without Calendar errors.
+
+### Enabled deployment
+
+1. Set the complete enabled configuration.
+2. Start Margin and select **Connect Calendar** in App Home.
+3. Confirm the consent page requests read-only Calendar event access.
+4. Capture a note during a calendar event and confirm verified context.
+5. Create two overlapping events and confirm Margin asks for clarification.
+6. Disconnect Calendar and confirm encrypted credentials are deleted.
+7. Capture another note and confirm standalone operation still works.
