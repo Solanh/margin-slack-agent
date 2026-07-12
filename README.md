@@ -52,10 +52,33 @@ Margin does **not** record audio, transcribe meetings, summarize entire channels
 
 ## Repository status
 
-This repository begins with the validated product definition, architecture, trust model, demo plan, and implementation backlog. The code under `src/` is a deliberately small domain scaffold, not a finished Slack app.
+Issue #1 now provides a Slack Bolt application shell with:
+
+- the current Slack `agent_view` manifest;
+- a writable Messages tab and App Home;
+- private `message.im` handling;
+- `app_home_opened` and `app_context_changed` listeners;
+- a Block Kit capture acknowledgement;
+- Socket Mode startup and strict environment validation.
+
+The acknowledgement explicitly states that storage is not active. Durable, idempotent capture is implemented in issue #2.
+
+## Run the Slack shell
+
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md) for app creation, token configuration, and verification.
+
+```bash
+cp .env.example .env
+npm install
+npm run typecheck
+npm test
+npm run build
+npm start
+```
 
 ## Documentation
 
+- [Slack developer sandbox setup](docs/SLACK_SETUP.md)
 - [Product specification](docs/PRODUCT_SPEC.md)
 - [Market and competitive research](docs/MARKET_VALIDATION.md)
 - [User flows](docs/USER_FLOWS.md)
@@ -79,16 +102,6 @@ This repository begins with the validated product definition, architecture, trus
 - a background job mechanism for digests and resurfacing
 
 See [Architecture](docs/ARCHITECTURE.md) for the production and hackathon variants.
-
-## Local domain scaffold
-
-```bash
-npm install
-npm test
-npm run typecheck
-```
-
-The scaffold currently validates the note data contract and the invariant that raw content is preserved independently from derived AI output.
 
 ## License
 
