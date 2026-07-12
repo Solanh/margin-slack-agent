@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 import {
   ContextConfidenceSchema,
+  ContextResolutionStatusSchema,
+  ContextSourceSchema,
   DisplayModeSchema,
   InferredFieldSchema,
   NoteStatusSchema,
@@ -35,7 +37,9 @@ interface NoteRow extends QueryResultRow {
   status: string;
   display_mode: string;
   meeting_id: string | null;
+  context_source: string;
   context_confidence: string;
+  context_resolution_status: string;
   reminder_intent: string | null;
   explicit_due_at: Date | string | null;
   inferred_fields: unknown;
@@ -97,7 +101,22 @@ const SAVE_DERIVED_SQL = `
 const SET_MEETING_CONTEXT_SQL = `
   UPDATE notes
   SET meeting_id = $4,
-      context_confidence = $5
+      context_confidence = $5,
+      context_source = COALESCE(
+        $6,
+        (
+          SELECT CASE provider
+            WHEN 'google_calendar' THEN 'google_calendar'
+            WHEN 'slack_huddle' THEN 'slack_huddle'
+            WHEN 'explicit' THEN 'explicit'
+          END
+          FROM meetings
+          WHERE id = $4
+            AND workspace_id = $2
+            AND user_id = $3
+        )
+      ),
+      context_resolution_status = 'attached'
   WHERE id = $1
     AND workspace_id = $2
     AND user_id = $3
@@ -185,6 +204,7 @@ export class PostgresNoteRepository implements NoteRepository {
       input.userId,
       input.meetingId,
       input.contextConfidence,
+      input.contextSource ?? null,
     ]);
 
     const row = result.rows[0];
@@ -236,8 +256,12 @@ export class PostgresNoteRepository implements NoteRepository {
       status: NoteStatusSchema.parse(row.status),
       displayMode: DisplayModeSchema.parse(row.display_mode),
       meetingId: row.meeting_id,
+      contextSource: ContextSourceSchema.parse(row.context_source),
       contextConfidence: ContextConfidenceSchema.parse(
         row.context_confidence,
+      ),
+      contextResolutionStatus: ContextResolutionStatusSchema.parse(
+        row.context_resolution_status,
       ),
       reminderIntent: row.reminder_intent,
       explicitDueAt: this.optionalDate(row.explicit_due_at),
