@@ -203,12 +203,22 @@ export class GoogleCalendarConnectionService {
       throw new GoogleOAuthError("OAuth state is invalid, expired, or already used");
     }
 
-    const tokenSet = await this.oauthClient.exchangeCode(code);
+    const [tokenSet, existing] = await Promise.all([
+      this.oauthClient.exchangeCode(code),
+      this.connections.get(owner, "google_calendar"),
+    ]);
+    const refreshToken = tokenSet.refreshToken ?? existing?.refreshToken ?? null;
+    if (!refreshToken) {
+      throw new GoogleOAuthError(
+        "Google did not return offline credentials; reconnect and grant consent",
+      );
+    }
+
     return this.connections.save({
       ...owner,
       provider: "google_calendar",
       accessToken: tokenSet.accessToken,
-      refreshToken: tokenSet.refreshToken,
+      refreshToken,
       scopes: tokenSet.scopes,
       expiresAt: tokenSet.expiresAt,
     });
@@ -234,10 +244,11 @@ export class GoogleCalendarConnectionService {
       revokedRemotely = await this.oauthClient.revoke(
         connection.refreshToken ?? connection.accessToken,
       );
-    } finally {
-      await this.connections.delete(owner, "google_calendar");
+    } catch {
+      revokedRemotely = false;
     }
 
+    await this.connections.delete(owner, "google_calendar");
     return { disconnected: true, revokedRemotely };
   }
 }
