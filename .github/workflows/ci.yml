@@ -13,6 +13,23 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://margin:margin@localhost:5432/margin
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: margin
+          POSTGRES_PASSWORD: margin
+          POSTGRES_DB: margin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U margin -d margin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Check out repository
@@ -27,10 +44,35 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Typecheck
-        run: npm run typecheck
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee typecheck.log
 
-      - name: Test
-        run: npm test
+      - name: Upload typecheck diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typecheck-diagnostics
+          path: typecheck.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Build
         run: npm run build
+
+      - name: Apply database migrations
+        run: |
+          set -o pipefail
+          npm run migrate 2>&1 | tee migration.log
+
+      - name: Upload migration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-diagnostics
+          path: migration.log
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Test
+        run: npm test

@@ -3,12 +3,12 @@ import { loadEnvironment } from "./config.js";
 import { CaptureRawNoteService } from "./services/captureRawNote.js";
 import { createSlackApp } from "./slack/app.js";
 import { createPostgresPool } from "./storage/postgres.js";
-import { PostgresRawNoteRepository } from "./storage/postgresRawNoteRepository.js";
+import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
 
 const environment = loadEnvironment();
 const pool = createPostgresPool(environment.DATABASE_URL);
-const rawNoteRepository = new PostgresRawNoteRepository(pool);
-const rawNoteCapturer = new CaptureRawNoteService(rawNoteRepository);
+const noteRepository = new PostgresNoteRepository(pool);
+const rawNoteCapturer = new CaptureRawNoteService(noteRepository);
 const app = createSlackApp(environment, rawNoteCapturer);
 
 async function start(): Promise<void> {

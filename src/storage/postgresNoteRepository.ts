@@ -1,0 +1,219 @@
+import { randomUUID } from "node:crypto";
+import type { Pool, QueryResultRow } from "pg";
+import {
+  ContextConfidenceSchema,
+  NoteStatusSchema,
+  NoteTypeSchema,
+  PrioritySchema,
+  RevisionSourceSchema,
+  type Note,
+  type NoteRevision,
+  type OwnerScope,
+  type RawNote,
+} from "../domain/note.js";
+import type {
+  CreateRawNoteInput,
+  CreateRevisionInput,
+  NoteRepository,
+  SaveDerivedNoteInput,
+} from "./noteRepository.js";
+import { PostgresRawNoteRepository } from "./postgresRawNoteRepository.js";
+
+interface NoteRow extends QueryResultRow {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  source_channel_id: string;
+  source_message_ts: string;
+  raw_text: string;
+  organized_text: string | null;
+  note_type: string | null;
+  priority: string;
+  status: string;
+  meeting_id: string | null;
+  context_confidence: string;
+  transformation_version: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+interface NoteRevisionRow extends QueryResultRow {
+  id: string;
+  note_id: string;
+  workspace_id: string;
+  user_id: string;
+  revision_source: string;
+  organized_text: string | null;
+  note_type: string | null;
+  priority: string | null;
+  status: string | null;
+  transformation_version: string | null;
+  inferred_fields: unknown;
+  uncertainties: unknown;
+  created_at: Date | string;
+}
+
+const GET_SQL = `
+  SELECT *
+  FROM notes
+  WHERE id = $1
+    AND workspace_id = $2
+    AND user_id = $3
+  LIMIT 1
+`;
+
+const SAVE_DERIVED_SQL = `
+  UPDATE notes
+  SET organized_text = $4,
+      note_type = $5,
+      priority = $6,
+      status = $7,
+      context_confidence = $8,
+      transformation_version = $9
+  WHERE id = $1
+    AND workspace_id = $2
+    AND user_id = $3
+  RETURNING *
+`;
+
+const APPEND_REVISION_SQL = `
+  INSERT INTO note_revisions (
+    id,
+    note_id,
+    workspace_id,
+    user_id,
+    revision_source,
+    organized_text,
+    note_type,
+    priority,
+    status,
+    transformation_version,
+    inferred_fields,
+    uncertainties
+  )
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  RETURNING *
+`;
+
+export class PostgresNoteRepository implements NoteRepository {
+  private readonly rawRepository: PostgresRawNoteRepository;
+
+  constructor(private readonly pool: Pick<Pool, "query">) {
+    this.rawRepository = new PostgresRawNoteRepository(pool);
+  }
+
+  createRaw(input: CreateRawNoteInput): Promise<RawNote> {
+    return this.rawRepository.createRaw(input);
+  }
+
+  async getById(owner: OwnerScope, id: string): Promise<Note | null> {
+    const result = await this.pool.query<NoteRow>(GET_SQL, [
+      id,
+      owner.workspaceId,
+      owner.userId,
+    ]);
+
+    const row = result.rows[0];
+    return row ? this.mapNote(row) : null;
+  }
+
+  async saveDerived(
+    owner: OwnerScope,
+    id: string,
+    update: SaveDerivedNoteInput,
+  ): Promise<Note> {
+    const result = await this.pool.query<NoteRow>(SAVE_DERIVED_SQL, [
+      id,
+      owner.workspaceId,
+      owner.userId,
+      update.organizedText,
+      update.noteType,
+      update.priority,
+      update.status,
+      update.contextConfidence,
+      update.transformationVersion,
+    ]);
+
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error("Owner-scoped note was not found for update");
+    }
+
+    return this.mapNote(row);
+  }
+
+  async appendRevision(input: CreateRevisionInput): Promise<NoteRevision> {
+    const result = await this.pool.query<NoteRevisionRow>(APPEND_REVISION_SQL, [
+      randomUUID(),
+      input.noteId,
+      input.workspaceId,
+      input.userId,
+      input.revisionSource,
+      input.organizedText,
+      input.noteType,
+      input.priority,
+      input.status,
+      input.transformationVersion,
+      JSON.stringify(input.inferredFields),
+      JSON.stringify(input.uncertainties),
+    ]);
+
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error("PostgreSQL did not return the appended note revision");
+    }
+
+    return this.mapRevision(row);
+  }
+
+  private mapNote(row: NoteRow): Note {
+    return {
+      id: row.id,
+      workspaceId: row.workspace_id,
+      userId: row.user_id,
+      sourceChannelId: row.source_channel_id,
+      sourceMessageTs: row.source_message_ts,
+      rawText: row.raw_text,
+      organizedText: row.organized_text,
+      noteType: row.note_type ? NoteTypeSchema.parse(row.note_type) : null,
+      priority: PrioritySchema.parse(row.priority),
+      status: NoteStatusSchema.parse(row.status),
+      meetingId: row.meeting_id,
+      contextConfidence: ContextConfidenceSchema.parse(
+        row.context_confidence,
+      ),
+      transformationVersion: row.transformation_version,
+      createdAt: this.toDate(row.created_at),
+      updatedAt: this.toDate(row.updated_at),
+    };
+  }
+
+  private mapRevision(row: NoteRevisionRow): NoteRevision {
+    return {
+      id: row.id,
+      noteId: row.note_id,
+      workspaceId: row.workspace_id,
+      userId: row.user_id,
+      revisionSource: RevisionSourceSchema.parse(row.revision_source),
+      organizedText: row.organized_text,
+      noteType: row.note_type ? NoteTypeSchema.parse(row.note_type) : null,
+      priority: row.priority ? PrioritySchema.parse(row.priority) : null,
+      status: row.status ? NoteStatusSchema.parse(row.status) : null,
+      transformationVersion: row.transformation_version,
+      inferredFields: this.stringArray(row.inferred_fields),
+      uncertainties: this.stringArray(row.uncertainties),
+      createdAt: this.toDate(row.created_at),
+    };
+  }
+
+  private stringArray(value: unknown): string[] {
+    if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+      throw new Error("Expected PostgreSQL JSON value to be a string array");
+    }
+    return value;
+  }
+
+  private toDate(value: Date | string): Date {
+    return value instanceof Date ? value : new Date(value);
+  }
+}
