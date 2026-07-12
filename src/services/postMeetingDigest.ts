@@ -66,8 +66,9 @@ export class PostMeetingDigestService {
 
       for (const digest of claimed) {
         try {
-          await this.deliver(digest, now);
-          delivered += 1;
+          if (await this.deliver(digest, now)) {
+            delivered += 1;
+          }
         } catch (error) {
           failed += 1;
           const retryAt = new Date(now.getTime() + retryDelayMs(digest.attempts));
@@ -86,7 +87,10 @@ export class PostMeetingDigestService {
     }
   }
 
-  private async deliver(digest: PostMeetingDigest, deliveredAt: Date): Promise<void> {
+  private async deliver(
+    digest: PostMeetingDigest,
+    deliveredAt: Date,
+  ): Promise<boolean> {
     const owner = ownerOf(digest);
     if (!(await this.repository.areDigestsEnabled(owner))) {
       await this.repository.markFailed(
@@ -95,7 +99,7 @@ export class PostMeetingDigestService {
         "digests_disabled",
         new Date(deliveredAt.getTime() + 24 * 60 * 60 * 1000),
       );
-      return;
+      return false;
     }
 
     const content = await this.repository.getContent(owner, digest.id);
@@ -136,6 +140,7 @@ export class PostMeetingDigestService {
     }
 
     await this.repository.markDelivered(owner, digest.id, reference, deliveredAt);
+    return true;
   }
 }
 
