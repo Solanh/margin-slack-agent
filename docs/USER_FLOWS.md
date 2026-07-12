@@ -100,18 +100,18 @@ At meeting end:
 > **Actions**
 > - Verify rollout flag ownership.
 
-Only user-captured notes appear. This is later roadmap work.
+Only user-captured notes appear. The owner can review all, snooze, or disable digests.
 
 ## Flow L: Pre-meeting resurfacing
 
-Before the next related meeting:
+Before the next verified event in the same Google Calendar series:
 
 > **From your last planning meeting**
 >
 > - Open question: Does migration affect customer-created workflows?
 > - Action: Verify rollout flag ownership.
 
-This is later roadmap work.
+The owner can resolve items, snooze, open notes, mute the series, or disable resurfacing globally. Margin does not use title similarity as series identity.
 
 ## Flow M: Retrieval
 
@@ -119,4 +119,17 @@ User asks:
 
 > What did I note about customer workflows?
 
-Margin returns ranked private results with organized text, meeting/date, status, and a control to reveal the original. Retrieval is later roadmap work.
+1. Margin recognizes the message as an explicit retrieval request before capture.
+2. It searches only the current workspace/user's persisted Margin notes and attached meeting titles.
+3. It returns ranked private results with organized text, meeting/date, status, priority, reminder state, and unresolved indicators.
+4. The user selects **View original** to open the immutable wording in a private modal.
+5. The retrieval request itself is not stored as a new note.
+
+Other supported examples:
+
+- `Find notes from Workflow Migration Review`
+- `What did I note about Maya?`
+- `Show unresolved high priority actions`
+- `List resolved questions about migration`
+
+A non-retrieval note such as `Find out whether migration affects customers` continues through normal durable capture.

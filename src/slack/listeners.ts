@@ -3,6 +3,7 @@ import type { RawNoteCapturer } from "../services/captureRawNote.js";
 import type { ContextResolutionService } from "../services/contextResolution.js";
 import type { GoogleCalendarConnectionService } from "../services/googleCalendarOAuth.js";
 import type { NoteCardService } from "../services/noteCard.js";
+import type { NoteRetrievalService } from "../services/noteRetrieval.js";
 import type {
   OrganizeNoteInput,
   OrganizeNoteService,
@@ -18,6 +19,10 @@ import {
   buildProcessingNoteBlocks,
   type SlackBlock,
 } from "./views/noteCard.js";
+import {
+  buildNoteRetrievalBlocks,
+  buildNoteRetrievalFallbackText,
+} from "./views/noteRetrieval.js";
 
 interface UserTextMessage {
   channel: string;
@@ -43,6 +48,7 @@ export interface SlackListenerDependencies {
   rawNoteCapturer: RawNoteCapturer;
   organizer: OrganizeNoteService;
   noteCards: NoteCardService;
+  noteRetrieval: NoteRetrievalService;
   contextResolver: ContextResolutionService;
   calendarConnections: GoogleCalendarConnectionService;
   slackContextSignals: SlackContextSignalService;
@@ -330,9 +336,9 @@ export function registerSlackListeners(
 
     const workspaceId = getWorkspaceId(body);
     if (!workspaceId) {
-      logger.error("Unable to identify Slack workspace for raw note capture");
+      logger.error("Unable to identify Slack workspace for private message");
       await say({
-        text: "Margin could not save this note.",
+        text: "Margin could not process this message.",
         blocks: buildCaptureFailureAcknowledgement(),
         thread_ts: message.thread_ts ?? message.ts,
       });
@@ -345,6 +351,46 @@ export function registerSlackListeners(
       userInfoPromise ??= client.users.info({ user: message.user });
       return userInfoPromise;
     };
+    const resolveTimeZone = async () => {
+      try {
+        const response = await getUserInfo();
+        return response.user?.tz ?? "UTC";
+      } catch {
+        return "UTC";
+      }
+    };
+
+    try {
+      const retrieval = await dependencies.noteRetrieval.search(
+        owner,
+        message.text,
+      );
+      if (retrieval) {
+        const timeZone = await resolveTimeZone();
+        await say({
+          text: buildNoteRetrievalFallbackText(retrieval),
+          blocks: buildNoteRetrievalBlocks(retrieval, timeZone) as never,
+          thread_ts: message.thread_ts ?? message.ts,
+        });
+        return;
+      }
+    } catch (error) {
+      logger.error("Unable to search private Margin notes", error);
+      await say({
+        text: "Margin could not search your private notes right now.",
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: ":warning: Margin could not search your private notes right now. Your saved notes were not changed.",
+            },
+          },
+        ],
+        thread_ts: message.thread_ts ?? message.ts,
+      });
+      return;
+    }
 
     await handlePrivateNoteMessage({
       workspaceId,
@@ -377,14 +423,7 @@ export function registerSlackListeners(
         dependencies.noteCards.getCardData(scope, noteId),
       post: (response) => say(response as never) as Promise<SlackPostResult>,
       update: (response) => client.chat.update(response as never),
-      resolveTimeZone: async () => {
-        try {
-          const response = await getUserInfo();
-          return response.user?.tz ?? "UTC";
-        } catch {
-          return "UTC";
-        }
-      },
+      resolveTimeZone,
       logError: (description, error) => logger.error(description, error),
     });
   });

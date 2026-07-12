@@ -4,6 +4,7 @@ import type { PostMeetingDigestRepository } from "../storage/postMeetingDigestRe
 import type { PreMeetingResurfacingRepository } from "../storage/preMeetingResurfacingRepository.js";
 import { registerCalendarActions } from "./calendarActions.js";
 import { registerNoteCardActions } from "./noteCardActions.js";
+import { registerNoteRetrievalActions } from "./noteRetrievalActions.js";
 import { registerPostMeetingDigestActions } from "./postMeetingDigestActions.js";
 import { registerPreMeetingResurfacingActions } from "./preMeetingResurfacingActions.js";
 import {
@@ -45,6 +46,7 @@ export function createSlackApp(
 
   registerSlackListeners(app, dependencies);
   registerNoteCardActions(app, dependencies.noteCards);
+  registerNoteRetrievalActions(app, dependencies.noteRetrieval);
   registerCalendarActions(app, dependencies.calendarConnections);
   registerPostMeetingDigestActions(app, dependencies.postMeetingDigests);
   registerPreMeetingResurfacingActions(
