@@ -2,6 +2,7 @@ import "dotenv/config";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadDatabaseEnvironment } from "../config.js";
+import { describeError } from "../observability/safeLogger.js";
 import { createPostgresPool } from "./postgres.js";
 
 const MIGRATION_LOCK_ID = 8_212_026;
@@ -61,6 +62,6 @@ async function migrate(): Promise<void> {
 }
 
 migrate().catch((error: unknown) => {
-  console.error("Database migration failed", error);
+  console.error("Database migration failed", describeError(error));
   process.exit(1);
 });
