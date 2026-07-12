@@ -52,7 +52,7 @@ Margin does **not** record audio, transcribe meetings, summarize entire channels
 
 ## Repository status
 
-Issues #1 and #2 provide the first complete capture path:
+The current stacked implementation covers issues #1 through #4:
 
 - current Slack `agent_view` manifest;
 - writable Messages tab and App Home;
@@ -60,15 +60,20 @@ Issues #1 and #2 provide the first complete capture path:
 - Socket Mode startup;
 - PostgreSQL migration runner;
 - atomic, idempotent raw-note persistence;
-- success acknowledgement only after the database write resolves;
-- explicit visible failure when persistence fails;
-- tests for message filtering, exact-text preservation, capture ordering, and idempotent SQL.
+- owner-scoped notes, meetings, reminders, revisions, and encrypted OAuth storage;
+- database-enforced immutable original text;
+- versioned structured note transformation;
+- strict Zod output validation and inference labels;
+- tool-free OpenAI Responses integration with `store: false`;
+- transactional current-state and revision persistence;
+- verbatim fallback for provider, validation, or persistence failure;
+- PostgreSQL-backed integration tests in CI.
 
-Meeting context and AI organization are deliberately not enabled yet.
+The transformation service is intentionally not yet invoked from the Slack acknowledgement path. Issue #5 will render the organized result and establish the interactive note-card flow.
 
 ## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md) and [PostgreSQL setup](docs/DATABASE_SETUP.md).
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), and [structured transformation](docs/TRANSFORMATION.md).
 
 ```bash
 cp .env.example .env
@@ -84,6 +89,8 @@ npm start
 
 - [Slack developer sandbox setup](docs/SLACK_SETUP.md)
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
+- [Database schema and ownership](docs/SCHEMA.md)
+- [Structured note transformation](docs/TRANSFORMATION.md)
 - [Product specification](docs/PRODUCT_SPEC.md)
 - [Market and competitive research](docs/MARKET_VALIDATION.md)
 - [User flows](docs/USER_FLOWS.md)
@@ -103,7 +110,7 @@ npm start
 - Slack Agent View and App Home
 - PostgreSQL for durable notes, context, and reminders
 - Google Calendar API for meeting matching
-- a structured-output LLM for formatting/classification
+- OpenAI structured outputs for conservative formatting/classification
 - a background job mechanism for digests and resurfacing
 
 See [Architecture](docs/ARCHITECTURE.md) for the production and hackathon variants.
