@@ -51,7 +51,7 @@ BEGIN
       ADD CONSTRAINT notes_owner_identity
       UNIQUE (id, workspace_id, user_id);
   END IF;
-END
+END;
 $$;
 
 DO $$
@@ -68,7 +68,7 @@ BEGIN
       REFERENCES meetings (id, workspace_id, user_id)
       ON DELETE RESTRICT;
   END IF;
-END
+END;
 $$;
 
 CREATE INDEX IF NOT EXISTS notes_owner_status_created_at_idx
@@ -149,7 +149,8 @@ CREATE TABLE IF NOT EXISTS workspace_installations (
   bot_user_id TEXT NOT NULL,
   installed_by_user_id TEXT NOT NULL,
   bot_token_ciphertext TEXT NOT NULL,
-  encryption_key_version INTEGER NOT NULL DEFAULT 1,
+  encryption_key_version INTEGER NOT NULL DEFAULT 1
+    CHECK (encryption_key_version > 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -163,7 +164,8 @@ CREATE TABLE IF NOT EXISTS oauth_connections (
   refresh_token_ciphertext TEXT,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   expires_at TIMESTAMPTZ,
-  encryption_key_version INTEGER NOT NULL DEFAULT 1,
+  encryption_key_version INTEGER NOT NULL DEFAULT 1
+    CHECK (encryption_key_version > 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT oauth_connections_owner_provider_unique
