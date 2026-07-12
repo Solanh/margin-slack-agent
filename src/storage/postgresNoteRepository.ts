@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 import {
   ContextConfidenceSchema,
+  DisplayModeSchema,
   InferredFieldSchema,
   NoteStatusSchema,
   NoteTypeSchema,
@@ -31,6 +32,7 @@ interface NoteRow extends QueryResultRow {
   note_type: string | null;
   priority: string;
   status: string;
+  display_mode: string;
   meeting_id: string | null;
   context_confidence: string;
   reminder_intent: string | null;
@@ -38,6 +40,8 @@ interface NoteRow extends QueryResultRow {
   inferred_fields: unknown;
   uncertainties: unknown;
   transformation_version: string | null;
+  card_channel_id: string | null;
+  card_message_ts: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -52,6 +56,7 @@ interface NoteRevisionRow extends QueryResultRow {
   note_type: string | null;
   priority: string | null;
   status: string | null;
+  display_mode: string;
   reminder_intent: string | null;
   explicit_due_at: Date | string | null;
   transformation_version: string | null;
@@ -75,12 +80,13 @@ const SAVE_DERIVED_SQL = `
       note_type = $5,
       priority = $6,
       status = $7,
-      context_confidence = $8,
-      reminder_intent = $9,
-      explicit_due_at = $10,
-      inferred_fields = $11,
-      uncertainties = $12,
-      transformation_version = $13
+      display_mode = $8,
+      context_confidence = $9,
+      reminder_intent = $10,
+      explicit_due_at = $11,
+      inferred_fields = $12,
+      uncertainties = $13,
+      transformation_version = $14
   WHERE id = $1
     AND workspace_id = $2
     AND user_id = $3
@@ -98,13 +104,14 @@ const APPEND_REVISION_SQL = `
     note_type,
     priority,
     status,
+    display_mode,
     reminder_intent,
     explicit_due_at,
     transformation_version,
     inferred_fields,
     uncertainties
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
   RETURNING *
 `;
 
@@ -143,6 +150,7 @@ export class PostgresNoteRepository implements NoteRepository {
       update.noteType,
       update.priority,
       update.status,
+      update.displayMode,
       update.contextConfidence,
       update.reminderIntent,
       update.explicitDueAt,
@@ -170,6 +178,7 @@ export class PostgresNoteRepository implements NoteRepository {
       input.noteType,
       input.priority,
       input.status,
+      input.displayMode,
       input.reminderIntent,
       input.explicitDueAt,
       input.transformationVersion,
@@ -197,6 +206,7 @@ export class PostgresNoteRepository implements NoteRepository {
       noteType: row.note_type ? NoteTypeSchema.parse(row.note_type) : null,
       priority: PrioritySchema.parse(row.priority),
       status: NoteStatusSchema.parse(row.status),
+      displayMode: DisplayModeSchema.parse(row.display_mode),
       meetingId: row.meeting_id,
       contextConfidence: ContextConfidenceSchema.parse(
         row.context_confidence,
@@ -206,6 +216,8 @@ export class PostgresNoteRepository implements NoteRepository {
       inferredFields: this.inferredFieldArray(row.inferred_fields),
       uncertainties: this.stringArray(row.uncertainties),
       transformationVersion: row.transformation_version,
+      cardChannelId: row.card_channel_id,
+      cardMessageTs: row.card_message_ts,
       createdAt: this.toDate(row.created_at),
       updatedAt: this.toDate(row.updated_at),
     };
@@ -222,6 +234,7 @@ export class PostgresNoteRepository implements NoteRepository {
       noteType: row.note_type ? NoteTypeSchema.parse(row.note_type) : null,
       priority: row.priority ? PrioritySchema.parse(row.priority) : null,
       status: row.status ? NoteStatusSchema.parse(row.status) : null,
+      displayMode: DisplayModeSchema.parse(row.display_mode),
       reminderIntent: row.reminder_intent,
       explicitDueAt: this.optionalDate(row.explicit_due_at),
       transformationVersion: row.transformation_version,
