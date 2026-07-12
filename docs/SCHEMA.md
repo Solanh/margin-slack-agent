@@ -6,7 +6,8 @@
 2. Every user-owned row includes both `workspace_id` and `user_id`.
 3. Relationships between user-owned records use composite foreign keys so data from one user cannot be attached to another user's note.
 4. OAuth and Slack installation tokens are stored only in ciphertext columns.
-5. Revisions record derived/user-edited state; they never replace the original note.
+5. OAuth authorization state is short-lived, one-time, and stored only as a hash.
+6. Revisions record derived/user-edited state; they never replace the original note.
 
 ## Tables
 
@@ -18,15 +19,17 @@ Stores the original Slack message and current derived state.
 - organized text, type, priority, and status;
 - optional meeting association;
 - context confidence and transformation version;
+- private Slack card channel/timestamp;
+- reversible organized/verbatim display mode;
 - unique Slack delivery identity.
 
 ### `note_revisions`
 
-Append-only snapshots of user, AI, or system changes to the derived note state. The table stores inference provenance and uncertainties alongside the revision.
+Append-only snapshots of user, AI, or system changes to the derived note state. The table stores inference provenance, uncertainty, reminder interpretation, and display mode alongside the revision.
 
 ### `meetings`
 
-Normalized Calendar, Slack huddle, or explicit meeting context. Provider-event uniqueness is scoped to the owning workspace user.
+Normalized Calendar, Slack huddle, or explicit meeting context. Provider-event uniqueness is scoped to the owning workspace user. Google Calendar candidates store only normalized title, start/end timestamps, and limited participant identifiers needed for future matching.
 
 ### `reminders`
 
@@ -39,7 +42,18 @@ A database check prevents a reminder from having both or neither scheduling form
 
 ### `oauth_connections`
 
-Stores encrypted user-level provider credentials. Repository code encrypts tokens with AES-256-GCM before executing SQL.
+Stores encrypted user-level provider credentials. Repository code encrypts access and refresh tokens with AES-256-GCM before executing SQL. Connections are unique per workspace, user, and provider.
+
+### `oauth_authorization_states`
+
+Stores one-time OAuth CSRF state metadata:
+
+- SHA-256 state hash, never the browser-visible state value;
+- workspace and user ownership;
+- provider;
+- expiration and consumption timestamps.
+
+The consume query requires the correct hash/provider, an unconsumed row, and a future expiration, then marks it consumed atomically.
 
 ### `workspace_installations`
 
@@ -61,6 +75,8 @@ Reads and updates include both values in their predicates. Composite foreign key
 - linking another user's meeting to a note;
 - creating a reminder for another user's note;
 - creating a revision for another user's note.
+
+Google OAuth connection and state queries are also scoped to workspace/user ownership. OAuth callback state resolves the owner server-side; the callback does not accept workspace or user IDs from browser query parameters.
 
 ## Original-text immutability
 
@@ -97,15 +113,22 @@ npm run migrate
 
 The migration runner applies files in lexical order and records them in `schema_migrations`.
 
+Issue #6 requires migrations through:
+
+```text
+005_google_calendar_oauth.sql
+```
+
 ## Rollback
 
-Rollback scripts are intentionally manual and intended for development environments:
+Rollback scripts are intentionally manual and intended for development environments. Run them in reverse migration order:
 
 ```bash
+psql "$DATABASE_URL" -f migrations/rollback/005_google_calendar_oauth.sql
+psql "$DATABASE_URL" -f migrations/rollback/004_add_interactive_note_cards.sql
+psql "$DATABASE_URL" -f migrations/rollback/003_store_transformation_provenance.sql
 psql "$DATABASE_URL" -f migrations/rollback/002_expand_margin_schema.sql
 psql "$DATABASE_URL" -f migrations/rollback/001_create_raw_notes.sql
 ```
 
-Run them in reverse migration order.
-
-The rollback for migration 002 deletes derived notes, revisions, reminders, meetings, and stored credentials. Back up any required data first. Production rollback should normally use a forward corrective migration instead of destructive scripts.
+Production rollback should normally use a forward corrective migration instead of destructive scripts. Back up any required derived data and credentials before running development rollbacks.
