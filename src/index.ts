@@ -17,6 +17,7 @@ import {
 import { NoteCardService } from "./services/noteCard.js";
 import { OpenAITransformationModel } from "./services/openAITransformationModel.js";
 import { OrganizeNoteService } from "./services/organizeNote.js";
+import { PostMeetingDigestService } from "./services/postMeetingDigest.js";
 import { SlackContextSignalService } from "./services/slackContextSignals.js";
 import { createSlackApp } from "./slack/app.js";
 import { createPostgresPool } from "./storage/postgres.js";
@@ -26,6 +27,7 @@ import { PostgresNoteInteractionRepository } from "./storage/postgresNoteInterac
 import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
 import { PostgresOAuthAuthorizationStateRepository } from "./storage/postgresOAuthAuthorizationStateRepository.js";
 import { PostgresOAuthConnectionRepository } from "./storage/postgresOAuthConnectionRepository.js";
+import { PostgresPostMeetingDigestRepository } from "./storage/postgresPostMeetingDigestRepository.js";
 import { PostgresSlackContextSignalRepository } from "./storage/postgresSlackContextSignalRepository.js";
 import { PostgresTransformationRepository } from "./storage/postgresTransformationRepository.js";
 
@@ -49,6 +51,7 @@ const contextCandidateRepository = new PostgresContextCandidateRepository(
   pool,
   noteRepository,
 );
+const postMeetingDigests = new PostgresPostMeetingDigestRepository(pool);
 const transformationRepository = new PostgresTransformationRepository(
   pool,
   noteRepository,
@@ -116,20 +119,24 @@ const app = createSlackApp(environment, {
   contextResolver,
   calendarConnections,
   slackContextSignals,
+  postMeetingDigests,
 });
+const digestWorker = new PostMeetingDigestService(postMeetingDigests, app.client);
 
 async function start(): Promise<void> {
   await pool.query("SELECT 1");
   await slackContextSignals.deleteExpired();
   await callbackServer.start();
   await app.start();
+  digestWorker.start();
   console.log(
-    "Margin is connected to Slack, PostgreSQL, scored context resolution, note organization, and Google OAuth.",
+    "Margin is connected to Slack, PostgreSQL, scored context resolution, post-meeting digests, note organization, and Google OAuth.",
   );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
+  digestWorker.stop();
   await app.stop();
   await callbackServer.stop();
   await pool.end();
@@ -146,6 +153,7 @@ process.on("SIGTERM", () => {
 
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", error);
+  digestWorker.stop();
   await callbackServer.stop().catch(() => undefined);
   await pool.end();
   process.exit(1);
