@@ -23,7 +23,7 @@ const AIEnvironmentSchema = z.object({
   AI_MODEL: z.string().min(1),
 });
 
-const GoogleEnvironmentSchema = z.object({
+const GoogleConfigurationSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
@@ -39,7 +39,15 @@ export type Environment = z.infer<typeof EnvironmentSchema>;
 export type DatabaseEnvironment = z.infer<typeof DatabaseEnvironmentSchema>;
 export type EncryptionEnvironment = z.infer<typeof EncryptionEnvironmentSchema>;
 export type AIEnvironment = z.infer<typeof AIEnvironmentSchema>;
-export type GoogleEnvironment = z.infer<typeof GoogleEnvironmentSchema>;
+export type EnabledGoogleEnvironment = z.infer<typeof GoogleConfigurationSchema> & {
+  enabled: true;
+};
+export type DisabledGoogleEnvironment = {
+  enabled: false;
+};
+export type GoogleEnvironment =
+  | EnabledGoogleEnvironment
+  | DisabledGoogleEnvironment;
 
 function formatConfigurationError(
   label: string,
@@ -94,5 +102,44 @@ export function loadAIEnvironment(
 export function loadGoogleEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): GoogleEnvironment {
-  return parseEnvironment("Google OAuth", GoogleEnvironmentSchema, source);
+  const enabledValue = source.GOOGLE_CALENDAR_ENABLED?.trim().toLowerCase();
+  if (
+    enabledValue !== undefined &&
+    enabledValue !== "" &&
+    enabledValue !== "true" &&
+    enabledValue !== "false"
+  ) {
+    throw new Error(
+      "Invalid Google OAuth configuration: GOOGLE_CALENDAR_ENABLED must be true or false.",
+    );
+  }
+
+  if (enabledValue === "false") {
+    return { enabled: false };
+  }
+
+  const coreValues = [
+    source.GOOGLE_CLIENT_ID,
+    source.GOOGLE_CLIENT_SECRET,
+    source.GOOGLE_REDIRECT_URI,
+  ].map((value) => value?.trim() ?? "");
+  const anyCoreValue = coreValues.some(Boolean);
+  const allCoreValues = coreValues.every(Boolean);
+
+  if (enabledValue !== "true" && !anyCoreValue) {
+    return { enabled: false };
+  }
+
+  if (!allCoreValues) {
+    throw new Error(
+      "Invalid Google OAuth configuration: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI must all be set when Calendar is enabled.",
+    );
+  }
+
+  const configuration = parseEnvironment(
+    "Google OAuth",
+    GoogleConfigurationSchema,
+    source,
+  );
+  return { enabled: true, ...configuration };
 }
