@@ -32,7 +32,7 @@ export function buildMarginHomeView() {
         type: "section" as const,
         text: {
           type: "mrkdwn" as const,
-          text: "*Prototype status*\nThe Slack capture shell is connected. Durable storage, meeting context, and organization are implemented in the next roadmap issues.",
+          text: "*Prototype status*\nPrivate messages are now saved durably and idempotently before Margin responds. Meeting context and AI organization are not enabled yet.",
         },
       },
       {
