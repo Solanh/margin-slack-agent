@@ -12,6 +12,7 @@ import {
   registerSlackListeners,
   type SlackListenerDependencies,
 } from "./listeners.js";
+import { installSlackApiPolicy } from "./slackApiExecutor.js";
 
 export interface SlackApplicationDependencies
   extends SlackListenerDependencies {
@@ -48,7 +49,11 @@ export function createSlackApp(
     socketMode: true,
     appToken: environment.SLACK_APP_TOKEN,
     logger: safeLogger as never,
+    clientOptions: {
+      rejectRateLimitedCalls: true,
+    },
   });
+  installSlackApiPolicy(app.client);
 
   app.error(async (error) => {
     safeLogger.logEvent(
