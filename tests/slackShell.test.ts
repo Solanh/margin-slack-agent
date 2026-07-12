@@ -77,17 +77,27 @@ describe("Slack shell", () => {
     expect(getWorkspaceId({})).toBeNull();
   });
 
-  it("builds disconnected and connected Home tabs with honest controls", () => {
+  it("builds unavailable, disconnected, and connected Home tabs honestly", () => {
+    const unavailableHome = buildMarginHomeView({
+      calendarAvailable: false,
+      calendarConnected: false,
+    });
     const disconnectedHome = buildMarginHomeView({
+      calendarAvailable: true,
       calendarConnected: false,
     });
     const connectedHome = buildMarginHomeView({
+      calendarAvailable: true,
       calendarConnected: true,
     });
     const acknowledgement = buildCaptureAcknowledgement();
     const failure = buildCaptureFailureAcknowledgement();
 
-    expect(disconnectedHome.type).toBe("home");
+    expect(unavailableHome.type).toBe("home");
+    expect(JSON.stringify(unavailableHome)).toContain(
+      "Google Calendar unavailable",
+    );
+    expect(JSON.stringify(unavailableHome)).not.toContain("Connect Calendar");
     expect(disconnectedHome.blocks.length).toBeGreaterThan(0);
     expect(JSON.stringify(disconnectedHome)).toContain(
       "does not record or transcribe",
