@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const EnvironmentSchema = z.object({
+const SlackEnvironmentSchema = z.object({
   SLACK_BOT_TOKEN: z.string().startsWith("xoxb-"),
   SLACK_SIGNING_SECRET: z.string().min(1),
   SLACK_APP_TOKEN: z.string().startsWith("xapp-"),
@@ -9,7 +9,30 @@ const EnvironmentSchema = z.object({
     .default("info"),
 });
 
+const DatabaseEnvironmentSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+});
+
+const EnvironmentSchema = SlackEnvironmentSchema.merge(
+  DatabaseEnvironmentSchema,
+);
+
 export type Environment = z.infer<typeof EnvironmentSchema>;
+export type DatabaseEnvironment = z.infer<typeof DatabaseEnvironmentSchema>;
+
+function formatConfigurationError(
+  label: string,
+  error: z.ZodError,
+): Error {
+  const fields = error.issues
+    .map((issue) => issue.path.join("."))
+    .filter(Boolean)
+    .join(", ");
+
+  return new Error(
+    `Invalid ${label} configuration${fields ? `: ${fields}` : ""}. See .env.example and docs/SLACK_SETUP.md.`,
+  );
+}
 
 export function loadEnvironment(
   source: NodeJS.ProcessEnv = process.env,
@@ -17,14 +40,19 @@ export function loadEnvironment(
   const result = EnvironmentSchema.safeParse(source);
 
   if (!result.success) {
-    const missing = result.error.issues
-      .map((issue) => issue.path.join("."))
-      .filter(Boolean)
-      .join(", ");
+    throw formatConfigurationError("application", result.error);
+  }
 
-    throw new Error(
-      `Invalid Slack configuration${missing ? `: ${missing}` : ""}. See .env.example and docs/SLACK_SETUP.md.`,
-    );
+  return result.data;
+}
+
+export function loadDatabaseEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): DatabaseEnvironment {
+  const result = DatabaseEnvironmentSchema.safeParse(source);
+
+  if (!result.success) {
+    throw formatConfigurationError("database", result.error);
   }
 
   return result.data;
