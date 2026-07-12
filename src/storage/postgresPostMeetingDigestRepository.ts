@@ -53,11 +53,11 @@ interface PreferenceRow extends QueryResultRow {
 const RESET_STALE_SQL = `
   UPDATE post_meeting_digests
   SET status = 'pending',
-      scheduled_for = $1,
+      scheduled_for = $1::timestamptz,
       locked_at = NULL,
       last_error_code = 'stale_processing_lock'
   WHERE status = 'processing'
-    AND locked_at < $1 - INTERVAL '10 minutes'
+    AND locked_at < $1::timestamptz - INTERVAL '10 minutes'
 `;
 
 const LIST_ELIGIBLE_SQL = `
@@ -66,7 +66,7 @@ const LIST_ELIGIBLE_SQL = `
   LEFT JOIN user_notification_preferences p
     ON p.workspace_id = m.workspace_id
    AND p.user_id = m.user_id
-  WHERE m.ends_at <= $1
+  WHERE m.ends_at <= $1::timestamptz
     AND COALESCE(p.digests_enabled, TRUE) = TRUE
     AND EXISTS (
       SELECT 1
@@ -102,7 +102,7 @@ const CLAIM_DUE_SQL = `
       ON p.workspace_id = d.workspace_id
      AND p.user_id = d.user_id
     WHERE d.status IN ('pending', 'snoozed')
-      AND d.scheduled_for <= $1
+      AND d.scheduled_for <= $1::timestamptz
       AND COALESCE(p.digests_enabled, TRUE) = TRUE
     ORDER BY d.scheduled_for ASC
     FOR UPDATE OF d SKIP LOCKED
@@ -110,7 +110,7 @@ const CLAIM_DUE_SQL = `
   ), claimed AS (
     UPDATE post_meeting_digests d
     SET status = 'processing',
-        locked_at = $1,
+        locked_at = $1::timestamptz,
         attempts = attempts + 1,
         last_error_code = NULL
     FROM due
