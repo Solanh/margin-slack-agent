@@ -38,6 +38,7 @@
       "bot": [
         "assistant:write",
         "chat:write",
+        "files:write",
         "im:history",
         "users:read"
       ]
