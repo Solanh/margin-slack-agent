@@ -13,7 +13,9 @@ const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
 describeDatabase("PostgreSQL schema invariants", () => {
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new Pool({
+    connectionString: databaseUrl ?? "postgresql://invalid",
+  });
   const notes = new PostgresNoteRepository(pool);
   const reminders = new PostgresReminderRepository(pool);
 
