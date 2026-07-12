@@ -14,7 +14,7 @@ Margin preserves that low-friction behavior rather than replacing it with a reco
 
 1. **You choose what matters.** Margin never records the meeting.
 2. **Your original is permanent.** AI output is a derived view, never a replacement.
-3. **Context is attached, not invented.** Meeting, participants, and dates come from Slack and Calendar signals.
+3. **Context is attached, not invented.** Meeting metadata comes from supported Slack and Calendar signals.
 4. **Uncertainty is visible.** Inferred fields are labeled and ambiguous context is confirmed.
 5. **Notes return at useful moments.** After the meeting and before the next related meeting.
 
@@ -29,7 +29,7 @@ Margin responds:
 **Open question · High priority**  
 Confirm whether the migration also affects workflows created directly by customers.
 
-**Context:** Workflow Migration Review · July 12, 2026  
+**Context:** Slack huddle (title unavailable)  
 **Reminder:** Before the next planning meeting  
 **Original preserved:** Yes
 
@@ -48,11 +48,11 @@ The hackathon MVP is intentionally narrow:
 - basic retrieval across the user's own notes
 - one proactive pre-meeting resurfacing flow
 
-Margin does **not** record audio, transcribe meetings, summarize entire channels, or become a general project-management system.
+Margin does **not** record audio, transcribe meetings, read unrelated channel history, or become a general project-management system.
 
 ## Repository status
 
-The current stacked implementation covers issues #1 through #6:
+The current stacked implementation covers issues #1 through #7:
 
 - current Slack `agent_view` manifest;
 - writable Messages tab and App Home;
@@ -71,15 +71,19 @@ The current stacked implementation covers issues #1 through #6:
 - least-privilege Google Calendar OAuth using `calendar.events.readonly`;
 - encrypted access/refresh tokens, automatic refresh, revocation, and disconnect;
 - minimized event lookup around the capture timestamp;
-- all plausible meeting candidates retained with no arbitrary selection;
-- standalone capture when Calendar is disconnected or unavailable;
+- all plausible Calendar candidates retained with no arbitrary selection;
+- `user_huddle_changed` and current-user profile refresh for active-huddle evidence;
+- short-lived, owner-scoped active-view channel/message context;
+- generic title-unavailable huddle records with no invented participants;
+- no `calls:read`, native-call lookup, audio, transcript, or channel-history dependency;
+- standalone capture when Calendar or Slack metadata is missing;
 - PostgreSQL-backed integration tests in CI.
 
-Issue #7 evaluates Slack huddle and Agent-context signals. Reminder wording is editable now; scheduled reminder delivery is implemented by the reminder workflow.
+Reminder wording is editable now; scheduled reminder delivery is implemented by the reminder workflow.
 
 ## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [Slack context signals](docs/SLACK_CONTEXT_SIGNALS.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
 
 ```bash
 cp .env.example .env
@@ -96,6 +100,7 @@ npm start
 - [Slack developer sandbox setup](docs/SLACK_SETUP.md)
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
 - [Google Calendar integration](docs/GOOGLE_CALENDAR.md)
+- [Slack huddle and Agent-context signals](docs/SLACK_CONTEXT_SIGNALS.md)
 - [Database schema and ownership](docs/SCHEMA.md)
 - [Structured note transformation](docs/TRANSFORMATION.md)
 - [Interactive private note card](docs/NOTE_CARD.md)
