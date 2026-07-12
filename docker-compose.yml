@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: margin
+      POSTGRES_PASSWORD: margin
+      POSTGRES_DB: margin
+    volumes:
+      - margin-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U margin -d margin"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      target: runtime
+    command: ["npm", "run", "migrate:runtime"]
+    environment:
+      DATABASE_URL: postgresql://margin:margin@postgres:5432/margin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runtime
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://margin:margin@postgres:5432/margin
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 3000
+    ports:
+      - "${HTTP_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/readyz').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+
+volumes:
+  margin-postgres:
