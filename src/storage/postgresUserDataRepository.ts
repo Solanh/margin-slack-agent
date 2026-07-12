@@ -136,52 +136,82 @@ export class PostgresUserDataRepository implements UserDataRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const [
-        settings,
-        notes,
-        revisions,
-        meetings,
-        reminders,
-        candidates,
-        digests,
-        resurfacings,
-        seriesPreferences,
-        integrations,
-        huddles,
-        activeContexts,
-      ] = await Promise.all([
-        client.query<SettingsRow>(
-          `SELECT digests_enabled, resurfacing_enabled, retention_days
-           FROM user_notification_preferences
-           WHERE workspace_id = $1 AND user_id = $2`,
-          [owner.workspaceId, owner.userId],
-        ),
-        this.ownerRows(client, "notes", owner, "created_at ASC"),
-        this.ownerRows(client, "note_revisions", owner, "created_at ASC"),
-        this.ownerRows(client, "meetings", owner, "starts_at ASC"),
-        this.ownerRows(client, "reminders", owner, "created_at ASC"),
-        this.ownerRows(client, "note_context_candidates", owner, "created_at ASC"),
-        this.ownerRows(client, "post_meeting_digests", owner, "created_at ASC"),
-        this.ownerRows(client, "pre_meeting_resurfacings", owner, "created_at ASC"),
-        this.ownerRows(client, "meeting_series_preferences", owner, "created_at ASC"),
-        client.query(
-          `
-            SELECT
-              provider,
-              scopes,
-              expires_at,
-              encryption_key_version,
-              created_at,
-              updated_at
-            FROM oauth_connections
-            WHERE workspace_id = $1 AND user_id = $2
-            ORDER BY provider ASC
-          `,
-          [owner.workspaceId, owner.userId],
-        ),
-        this.ownerRows(client, "slack_huddle_states", owner, "observed_at ASC"),
-        this.ownerRows(client, "slack_active_contexts", owner, "observed_at ASC"),
-      ]);
+      const settings = await client.query<SettingsRow>(
+        `SELECT digests_enabled, resurfacing_enabled, retention_days
+         FROM user_notification_preferences
+         WHERE workspace_id = $1 AND user_id = $2`,
+        [owner.workspaceId, owner.userId],
+      );
+      const notes = await this.ownerRows(client, "notes", owner, "created_at ASC");
+      const revisions = await this.ownerRows(
+        client,
+        "note_revisions",
+        owner,
+        "created_at ASC",
+      );
+      const meetings = await this.ownerRows(
+        client,
+        "meetings",
+        owner,
+        "starts_at ASC",
+      );
+      const reminders = await this.ownerRows(
+        client,
+        "reminders",
+        owner,
+        "created_at ASC",
+      );
+      const candidates = await this.ownerRows(
+        client,
+        "note_context_candidates",
+        owner,
+        "created_at ASC",
+      );
+      const digests = await this.ownerRows(
+        client,
+        "post_meeting_digests",
+        owner,
+        "created_at ASC",
+      );
+      const resurfacings = await this.ownerRows(
+        client,
+        "pre_meeting_resurfacings",
+        owner,
+        "created_at ASC",
+      );
+      const seriesPreferences = await this.ownerRows(
+        client,
+        "meeting_series_preferences",
+        owner,
+        "created_at ASC",
+      );
+      const integrations = await client.query(
+        `
+          SELECT
+            provider,
+            scopes,
+            expires_at,
+            encryption_key_version,
+            created_at,
+            updated_at
+          FROM oauth_connections
+          WHERE workspace_id = $1 AND user_id = $2
+          ORDER BY provider ASC
+        `,
+        [owner.workspaceId, owner.userId],
+      );
+      const huddles = await this.ownerRows(
+        client,
+        "slack_huddle_states",
+        owner,
+        "observed_at ASC",
+      );
+      const activeContexts = await this.ownerRows(
+        client,
+        "slack_active_contexts",
+        owner,
+        "observed_at ASC",
+      );
       await client.query("COMMIT");
 
       const settingsRow = settings.rows[0];
@@ -260,17 +290,17 @@ export class PostgresUserDataRepository implements UserDataRepository {
           UPDATE retention_cleanup_jobs
           SET status = 'failed',
               locked_at = NULL,
-              next_run_at = LEAST(next_run_at, $1),
+              next_run_at = LEAST(next_run_at, $1::timestamptz),
               last_error_code = 'stale_retention_lock'
           WHERE status = 'processing'
-            AND locked_at < $1 - INTERVAL '15 minutes'
+            AND locked_at < $1::timestamptz - INTERVAL '15 minutes'
         ), due AS (
           SELECT j.workspace_id, j.user_id
           FROM retention_cleanup_jobs j
           JOIN user_notification_preferences p
             USING (workspace_id, user_id)
           WHERE j.status IN ('pending', 'failed')
-            AND j.next_run_at <= $1
+            AND j.next_run_at <= $1::timestamptz
             AND p.retention_days IS NOT NULL
           ORDER BY j.next_run_at ASC
           FOR UPDATE OF j SKIP LOCKED
@@ -278,7 +308,7 @@ export class PostgresUserDataRepository implements UserDataRepository {
         )
         UPDATE retention_cleanup_jobs j
         SET status = 'processing',
-            locked_at = $1,
+            locked_at = $1::timestamptz,
             attempts = j.attempts + 1,
             last_error_code = NULL
         FROM due
