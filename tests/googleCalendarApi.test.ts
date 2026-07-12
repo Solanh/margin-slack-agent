@@ -58,7 +58,7 @@ function oauthClient(fetchImpl = vi.fn()) {
 }
 
 describe("GoogleCalendarApiService", () => {
-  it("queries only a small overlap window and requests minimized fields", async () => {
+  it("queries only a small overlap window and requests minimized series fields", async () => {
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));
       expect(url.searchParams.get("timeMin")).toBe(
@@ -70,6 +70,7 @@ describe("GoogleCalendarApiService", () => {
       expect(url.searchParams.get("singleEvents")).toBe("true");
       const fields = url.searchParams.get("fields") ?? "";
       expect(fields).toContain("summary");
+      expect(fields).toContain("iCalUID");
       expect(fields).toContain("attendees(email,self,responseStatus)");
       expect(fields).not.toContain("description");
       expect(fields).not.toContain("location");
@@ -80,6 +81,7 @@ describe("GoogleCalendarApiService", () => {
           items: [
             {
               id: "event-1",
+              iCalUID: "workflow-review@example.com",
               summary: "Workflow Review",
               status: "confirmed",
               eventType: "default",
@@ -138,6 +140,7 @@ describe("GoogleCalendarApiService", () => {
     ).resolves.toEqual([
       {
         providerEventId: "event-1",
+        seriesKey: "google:workflow-review@example.com",
         title: "Workflow Review",
         startsAt: new Date("2026-07-12T17:45:00.000Z"),
         endsAt: new Date("2026-07-12T18:30:00.000Z"),
@@ -147,6 +150,51 @@ describe("GoogleCalendarApiService", () => {
           "owner@example.com",
         ],
       },
+    ]);
+  });
+
+  it("queries a bounded future window and preserves recurring-series identity", async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get("timeMin")).toBe(
+        "2026-07-12T18:00:00.000Z",
+      );
+      expect(url.searchParams.get("timeMax")).toBe(
+        "2026-07-13T18:00:00.000Z",
+      );
+      expect(url.searchParams.get("maxResults")).toBe("50");
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "instance-20260713",
+              recurringEventId: "series-event-id",
+              iCalUID: "planning-series@example.com",
+              summary: "Planning",
+              status: "confirmed",
+              eventType: "default",
+              start: { dateTime: "2026-07-13T14:00:00.000Z" },
+              end: { dateTime: "2026-07-13T14:30:00.000Z" },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const service = new GoogleCalendarApiService(
+      repository(connection()),
+      oauthClient(),
+      fetchImpl,
+    );
+
+    await expect(
+      service.listUpcomingEvents(owner, capturedAt),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        providerEventId: "instance-20260713",
+        seriesKey: "google:planning-series@example.com",
+        title: "Planning",
+      }),
     ]);
   });
 
