@@ -67,6 +67,7 @@ const LIST_ELIGIBLE_SQL = `
     ON p.workspace_id = m.workspace_id
    AND p.user_id = m.user_id
   WHERE m.ends_at <= $1::timestamptz
+    AND m.ends_at > $1::timestamptz - INTERVAL '24 hours'
     AND COALESCE(p.digests_enabled, TRUE) = TRUE
     AND EXISTS (
       SELECT 1
