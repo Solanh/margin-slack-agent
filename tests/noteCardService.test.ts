@@ -54,6 +54,7 @@ function setup() {
     createRaw: vi.fn(),
     getById: vi.fn(async () => note),
     saveDerived: vi.fn(),
+    setMeetingContext: vi.fn(),
     appendRevision: vi.fn(),
   };
   const interactions: NoteInteractionRepository = {
