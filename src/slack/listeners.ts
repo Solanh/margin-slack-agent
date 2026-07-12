@@ -16,10 +16,7 @@ interface UserTextMessage {
 
 interface SlackReply {
   text: string;
-  blocks: ReturnType<
-    | typeof buildCaptureAcknowledgement
-    | typeof buildCaptureFailureAcknowledgement
-  >;
+  blocks: ReturnType<typeof buildCaptureAcknowledgement>;
   thread_ts: string;
 }
 
