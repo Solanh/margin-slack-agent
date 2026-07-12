@@ -369,7 +369,7 @@ export function registerSlackListeners(
         const timeZone = await resolveTimeZone();
         await say({
           text: buildNoteRetrievalFallbackText(retrieval),
-          blocks: buildNoteRetrievalBlocks(retrieval, timeZone),
+          blocks: buildNoteRetrievalBlocks(retrieval, timeZone) as never,
           thread_ts: message.thread_ts ?? message.ts,
         });
         return;
