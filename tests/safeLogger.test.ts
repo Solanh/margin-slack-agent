@@ -94,7 +94,8 @@ describe("SafeStructuredLogger", () => {
     expect(serialized).not.toContain("csrf-state");
     expect(serialized).not.toContain("customer strategy");
     expect(serialized).not.toContain("person@example.com");
-    expect(serialized).toContain("23505");
+    expect(serialized).not.toContain("23505");
+    expect(serialized).toContain("safe structural detail");
   });
 
   it("classifies retryable and non-retryable error families without messages", () => {
