@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Pool } from "pg";
+import { describeError } from "../observability/safeLogger.js";
 import { PostgresMeetingRepository } from "../storage/postgresMeetingRepository.js";
 import { PostgresNoteRepository } from "../storage/postgresNoteRepository.js";
 import { PostgresPreMeetingResurfacingRepository } from "../storage/postgresPreMeetingResurfacingRepository.js";
@@ -138,7 +139,10 @@ async function seedNote(input: {
 
 main()
   .catch((error: unknown) => {
-    console.error("Unable to seed pre-meeting resurfacing demo", error);
+    console.error(
+      "Unable to seed pre-meeting resurfacing demo",
+      describeError(error),
+    );
     process.exitCode = 1;
   })
   .finally(async () => {
