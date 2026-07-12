@@ -70,6 +70,12 @@ export interface ApplyUserNotePatchInput extends OwnerScope {
   patch: UserNotePatch;
 }
 
+export interface SetMeetingContextInput extends OwnerScope {
+  noteId: string;
+  meetingId: string;
+  contextConfidence: Note["contextConfidence"];
+}
+
 export interface RawNoteRepository {
   /**
    * Must be idempotent for the tuple
@@ -88,6 +94,8 @@ export interface NoteRepository extends RawNoteRepository {
     id: string,
     update: SaveDerivedNoteInput,
   ): Promise<Note>;
+
+  setMeetingContext(input: SetMeetingContextInput): Promise<Note>;
 
   appendRevision(input: CreateRevisionInput): Promise<NoteRevision>;
 }
