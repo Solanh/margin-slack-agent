@@ -13,12 +13,18 @@ const DatabaseEnvironmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
 });
 
+const EncryptionEnvironmentSchema = z.object({
+  TOKEN_ENCRYPTION_KEY: z.string().min(1),
+  TOKEN_ENCRYPTION_KEY_VERSION: z.coerce.number().int().positive().default(1),
+});
+
 const EnvironmentSchema = SlackEnvironmentSchema.merge(
   DatabaseEnvironmentSchema,
 );
 
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type DatabaseEnvironment = z.infer<typeof DatabaseEnvironmentSchema>;
+export type EncryptionEnvironment = z.infer<typeof EncryptionEnvironmentSchema>;
 
 function formatConfigurationError(
   label: string,
@@ -30,7 +36,7 @@ function formatConfigurationError(
     .join(", ");
 
   return new Error(
-    `Invalid ${label} configuration${fields ? `: ${fields}` : ""}. See .env.example and docs/SLACK_SETUP.md.`,
+    `Invalid ${label} configuration${fields ? `: ${fields}` : ""}. See .env.example and the setup documentation.`,
   );
 }
 
@@ -53,6 +59,18 @@ export function loadDatabaseEnvironment(
 
   if (!result.success) {
     throw formatConfigurationError("database", result.error);
+  }
+
+  return result.data;
+}
+
+export function loadEncryptionEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): EncryptionEnvironment {
+  const result = EncryptionEnvironmentSchema.safeParse(source);
+
+  if (!result.success) {
+    throw formatConfigurationError("token encryption", result.error);
   }
 
   return result.data;
