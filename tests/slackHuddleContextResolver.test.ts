@@ -54,7 +54,7 @@ function setup(active = true) {
     setMeetingContext: vi.fn(async () => ({
       ...note,
       meetingId: meeting.id,
-      contextConfidence: "exact",
+      contextConfidence: "exact" as const,
     })),
     appendRevision: vi.fn(),
   };
