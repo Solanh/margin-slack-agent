@@ -15,6 +15,7 @@ import {
   GoogleCalendarOAuthClient,
 } from "./services/googleCalendarOAuth.js";
 import { NoteCardService } from "./services/noteCard.js";
+import { NoteRetrievalService } from "./services/noteRetrieval.js";
 import { OpenAITransformationModel } from "./services/openAITransformationModel.js";
 import { OrganizeNoteService } from "./services/organizeNote.js";
 import { PostMeetingDigestService } from "./services/postMeetingDigest.js";
@@ -26,6 +27,7 @@ import { PostgresContextCandidateRepository } from "./storage/postgresContextCan
 import { PostgresMeetingRepository } from "./storage/postgresMeetingRepository.js";
 import { PostgresNoteInteractionRepository } from "./storage/postgresNoteInteractionRepository.js";
 import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
+import { PostgresNoteRetrievalRepository } from "./storage/postgresNoteRetrievalRepository.js";
 import { PostgresOAuthAuthorizationStateRepository } from "./storage/postgresOAuthAuthorizationStateRepository.js";
 import { PostgresOAuthConnectionRepository } from "./storage/postgresOAuthConnectionRepository.js";
 import { PostgresPostMeetingDigestRepository } from "./storage/postgresPostMeetingDigestRepository.js";
@@ -44,6 +46,7 @@ const cipher = AesGcmTokenCipher.fromBase64(
 );
 
 const noteRepository = new PostgresNoteRepository(pool);
+const noteRetrievalRepository = new PostgresNoteRetrievalRepository(pool);
 const meetingRepository = new PostgresMeetingRepository(pool);
 const interactionRepository = new PostgresNoteInteractionRepository(
   pool,
@@ -116,10 +119,12 @@ const noteCards = new NoteCardService(
   meetingRepository,
   contextCandidateRepository,
 );
+const noteRetrieval = new NoteRetrievalService(noteRetrievalRepository);
 const app = createSlackApp(environment, {
   rawNoteCapturer,
   organizer,
   noteCards,
+  noteRetrieval,
   contextResolver,
   calendarConnections,
   slackContextSignals,
@@ -142,7 +147,7 @@ async function start(): Promise<void> {
   digestWorker.start();
   resurfacingWorker.start();
   console.log(
-    "Margin is connected to Slack, PostgreSQL, scored context resolution, post-meeting digests, pre-meeting resurfacing, note organization, and Google OAuth.",
+    "Margin is connected to Slack, PostgreSQL, private note retrieval, scored context resolution, post-meeting digests, pre-meeting resurfacing, note organization, and Google OAuth.",
   );
 }
 
