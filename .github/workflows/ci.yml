@@ -61,7 +61,18 @@ jobs:
         run: npm run build
 
       - name: Apply database migrations
-        run: npm run migrate
+        run: |
+          set -o pipefail
+          npm run migrate 2>&1 | tee migration.log
+
+      - name: Upload migration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-diagnostics
+          path: migration.log
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Test
         run: npm test
