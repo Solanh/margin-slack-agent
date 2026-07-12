@@ -322,7 +322,7 @@ export class PostgresContextCandidateRepository
 
       await this.insertCandidate(
         client,
-        { ...owner, noteId, candidates: [], resolutionStatus: "attached", selectedCandidateId: id },
+        { ...owner, noteId },
         candidate,
         true,
       );
