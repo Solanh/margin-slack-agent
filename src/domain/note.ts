@@ -39,6 +39,7 @@ export interface RawNote {
   id: string;
   workspaceId: string;
   userId: string;
+  sourceChannelId: string;
   sourceMessageTs: string;
   rawText: string;
   createdAt: Date;
