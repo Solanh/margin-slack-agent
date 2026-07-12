@@ -14,8 +14,25 @@ interface UserTextMessage {
   user: string;
 }
 
+interface SlackReply {
+  text: string;
+  blocks: ReturnType<
+    | typeof buildCaptureAcknowledgement
+    | typeof buildCaptureFailureAcknowledgement
+  >;
+  thread_ts: string;
+}
+
 export interface SlackListenerDependencies {
   rawNoteCapturer: RawNoteCapturer;
+}
+
+interface HandlePrivateNoteInput {
+  workspaceId: string;
+  message: UserTextMessage;
+  capture: RawNoteCapturer["capture"];
+  reply: (message: SlackReply) => Promise<unknown>;
+  logError: (message: string, error?: unknown) => void;
 }
 
 export function isUserTextMessage(message: unknown): message is UserTextMessage {
@@ -65,6 +82,50 @@ export function getWorkspaceId(body: unknown): string | null {
   return null;
 }
 
+export async function handlePrivateNoteMessage({
+  workspaceId,
+  message,
+  capture,
+  reply,
+  logError,
+}: HandlePrivateNoteInput): Promise<void> {
+  try {
+    await capture({
+      workspaceId,
+      userId: message.user,
+      sourceChannelId: message.channel,
+      sourceMessageTs: message.ts,
+      rawText: message.text,
+    });
+  } catch (error) {
+    logError("Unable to persist raw note", error);
+
+    try {
+      await reply({
+        text: "Margin could not save this note.",
+        blocks: buildCaptureFailureAcknowledgement(),
+        thread_ts: message.thread_ts ?? message.ts,
+      });
+    } catch (acknowledgementError) {
+      logError(
+        "Unable to send raw-note persistence failure acknowledgement",
+        acknowledgementError,
+      );
+    }
+    return;
+  }
+
+  try {
+    await reply({
+      text: "Margin saved your note privately and preserved the original.",
+      blocks: buildCaptureAcknowledgement(),
+      thread_ts: message.thread_ts ?? message.ts,
+    });
+  } catch (error) {
+    logError("Raw note saved, but acknowledgement failed", error);
+  }
+}
+
 export function registerSlackListeners(
   app: App,
   dependencies: SlackListenerDependencies,
@@ -106,40 +167,12 @@ export function registerSlackListeners(
       return;
     }
 
-    try {
-      await dependencies.rawNoteCapturer.capture({
-        workspaceId,
-        userId: message.user,
-        sourceChannelId: message.channel,
-        sourceMessageTs: message.ts,
-        rawText: message.text,
-      });
-    } catch (error) {
-      logger.error("Unable to persist raw note", error);
-
-      try {
-        await say({
-          text: "Margin could not save this note.",
-          blocks: buildCaptureFailureAcknowledgement(),
-          thread_ts: message.thread_ts ?? message.ts,
-        });
-      } catch (acknowledgementError) {
-        logger.error(
-          "Unable to send raw-note persistence failure acknowledgement",
-          acknowledgementError,
-        );
-      }
-      return;
-    }
-
-    try {
-      await say({
-        text: "Margin saved your note privately and preserved the original.",
-        blocks: buildCaptureAcknowledgement(),
-        thread_ts: message.thread_ts ?? message.ts,
-      });
-    } catch (error) {
-      logger.error("Raw note saved, but acknowledgement failed", error);
-    }
+    await handlePrivateNoteMessage({
+      workspaceId,
+      message,
+      capture: (input) => dependencies.rawNoteCapturer.capture(input),
+      reply: (response) => say(response),
+      logError: (description, error) => logger.error(description, error),
+    });
   });
 }
