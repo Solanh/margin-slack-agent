@@ -50,7 +50,9 @@ describe("PostgresOAuthConnectionRepository", () => {
 
   it("scopes reads and deletes by workspace and user", async () => {
     const cipher = new AesGcmTokenCipher(randomBytes(32));
-    const query = vi.fn(async () => ({ rows: [], rowCount: 0 }));
+    const query = vi.fn(
+      async (_sql: string, _values: unknown[]) => ({ rows: [], rowCount: 0 }),
+    );
     const repository = new PostgresOAuthConnectionRepository(
       { query } as never,
       cipher,
