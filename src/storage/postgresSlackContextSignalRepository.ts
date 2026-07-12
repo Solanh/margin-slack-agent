@@ -60,7 +60,11 @@ const SAVE_HUDDLE_SQL = `
       THEN LEAST(slack_huddle_states.observed_at, EXCLUDED.observed_at)
       ELSE EXCLUDED.observed_at
     END,
-    expires_at = GREATEST(EXCLUDED.expires_at, EXCLUDED.observed_at + INTERVAL '1 second'),
+    expires_at = CASE
+      WHEN slack_huddle_states.call_id IS NOT DISTINCT FROM EXCLUDED.call_id
+      THEN GREATEST(slack_huddle_states.expires_at, EXCLUDED.expires_at)
+      ELSE GREATEST(EXCLUDED.expires_at, EXCLUDED.observed_at + INTERVAL '1 second')
+    END,
     source_event_ts = EXCLUDED.source_event_ts
   RETURNING workspace_id, user_id, call_id, observed_at, expires_at, source_event_ts
 `;
