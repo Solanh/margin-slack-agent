@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS notes (
   id UUID PRIMARY KEY,
   workspace_id TEXT NOT NULL,
@@ -14,5 +12,3 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE INDEX IF NOT EXISTS notes_owner_created_at_idx
   ON notes (workspace_id, user_id, created_at DESC);
-
-COMMIT;
