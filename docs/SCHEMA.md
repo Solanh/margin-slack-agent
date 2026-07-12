@@ -4,17 +4,50 @@
 
 1. `notes.raw_text` is immutable after insertion.
 2. Every user-owned row includes both `workspace_id` and `user_id`.
-3. Relationships between user-owned records use composite foreign keys so data from one user cannot be attached to another user's note.
-4. OAuth and Slack installation tokens are stored only in ciphertext columns.
-5. OAuth authorization state is short-lived, one-time, and stored only as a hash.
-6. Slack context signals are minimal, owner-scoped, and expire automatically.
-7. Revisions record derived/user-edited state; they never replace the original note.
+3. Relationships between user-owned records use composite foreign keys.
+4. Context candidates and the note's selected resolution commit together.
+5. OAuth and Slack installation tokens are stored only in ciphertext columns.
+6. OAuth authorization state is short-lived, one-time, and stored only as a hash.
+7. Slack context signals are minimal, owner-scoped, and expire automatically.
+8. Revisions record derived/user-edited state; they never replace the original note.
 
 ## Tables
 
 ### `notes`
 
-Stores the immutable Slack message, current derived state, optional meeting association, private card reference, provenance, and reversible organized/verbatim display mode.
+Stores the immutable Slack message, current derived state, private card reference, and selected context state.
+
+Context fields:
+
+- `meeting_id`: selected owner-scoped meeting or null;
+- `context_source`: `google_calendar`, `slack_huddle`, `explicit`, or `standalone`;
+- `context_confidence`: exact/high/medium/low/unresolved;
+- `context_resolution_status`: pending/attached/needs clarification/standalone.
+
+A shape constraint requires attached notes to have a meeting and non-standalone source. Other resolution states require no selected meeting.
+
+### `note_context_candidates`
+
+Stores every candidate considered for one note:
+
+- owner and note ID;
+- nullable owner-scoped meeting ID;
+- source;
+- bounded score from 0–100;
+- confidence;
+- structured evidence signals;
+- selected flag;
+- timestamps.
+
+Database constraints require:
+
+- standalone candidates to have no meeting;
+- all other candidates to have a meeting;
+- candidate meeting and note ownership to match;
+- unique source/meeting identity per note;
+- at most one selected candidate per note.
+
+Application transactions additionally require exactly one standalone candidate for each completed resolution.
 
 ### `note_revisions`
 
@@ -66,6 +99,27 @@ The shape constraint requires a message timestamp only for message context. No c
 
 Reserves encrypted storage for multi-workspace Slack installation credentials. The current hackathon shell still reads one Slack token from environment variables.
 
+## Context transactions
+
+### Automatic resolution
+
+`persistResolution`:
+
+1. locks the owner-scoped note;
+2. replaces its candidate set;
+3. validates standalone and selected-candidate rules;
+4. inserts all candidates;
+5. updates selected meeting/source/confidence/status;
+6. commits once.
+
+### One-tap selection
+
+`selectCandidate` locks the note and candidate, clears the previous selection, marks exactly one candidate, and updates the note in the same transaction. A meeting selection becomes explicit/exact because the user confirmed it. Choosing the standalone candidate clears the meeting and returns the note to standalone state.
+
+### Manual Meeting modal
+
+`selectExplicitMeeting` verifies meeting ownership, creates a 100-point explicit candidate (or a standalone candidate for No meeting), and updates the note atomically.
+
 ## Ownership enforcement
 
 Application repository methods require:
@@ -77,7 +131,7 @@ Application repository methods require:
 }
 ```
 
-Reads and updates include both values. Composite foreign keys prevent cross-user meeting, reminder, and revision links.
+Reads and updates include both values. Composite foreign keys prevent cross-user meeting, candidate, reminder, and revision links.
 
 Workspace-wide huddle events are retained only when the workspace/user already owns a Margin note or OAuth connection. First-use capture persists the raw note before refreshing the current user's profile, establishing ownership before any huddle state is saved.
 
@@ -104,10 +158,10 @@ npm run build
 npm run migrate
 ```
 
-Issue #7 requires migrations through:
+Issue #8 requires migrations through:
 
 ```text
-006_slack_context_signals.sql
+007_context_resolution.sql
 ```
 
 ## Rollback
@@ -115,6 +169,7 @@ Issue #7 requires migrations through:
 Development rollbacks run in reverse order:
 
 ```bash
+psql "$DATABASE_URL" -f migrations/rollback/007_context_resolution.sql
 psql "$DATABASE_URL" -f migrations/rollback/006_slack_context_signals.sql
 psql "$DATABASE_URL" -f migrations/rollback/005_google_calendar_oauth.sql
 psql "$DATABASE_URL" -f migrations/rollback/004_add_interactive_note_cards.sql
