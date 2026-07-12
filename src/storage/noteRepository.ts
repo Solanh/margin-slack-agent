@@ -1,8 +1,10 @@
 import type {
+  InferredField,
   Note,
   NoteRevision,
   OwnerScope,
   RawNote,
+  Transformation,
 } from "../domain/note.js";
 
 export interface CreateRawNoteInput extends OwnerScope {
@@ -17,6 +19,10 @@ export interface SaveDerivedNoteInput {
   priority: Note["priority"];
   status: Note["status"];
   contextConfidence: Note["contextConfidence"];
+  reminderIntent: Note["reminderIntent"];
+  explicitDueAt: Note["explicitDueAt"];
+  inferredFields: InferredField[];
+  uncertainties: string[];
   transformationVersion: Note["transformationVersion"];
 }
 
@@ -27,9 +33,17 @@ export interface CreateRevisionInput extends OwnerScope {
   noteType: NoteRevision["noteType"];
   priority: NoteRevision["priority"];
   status: NoteRevision["status"];
+  reminderIntent: NoteRevision["reminderIntent"];
+  explicitDueAt: NoteRevision["explicitDueAt"];
   transformationVersion: NoteRevision["transformationVersion"];
-  inferredFields: string[];
+  inferredFields: InferredField[];
   uncertainties: string[];
+}
+
+export interface ApplyTransformationInput extends OwnerScope {
+  noteId: string;
+  transformation: Transformation;
+  transformationVersion: string;
 }
 
 export interface RawNoteRepository {
@@ -52,4 +66,8 @@ export interface NoteRepository extends RawNoteRepository {
   ): Promise<Note>;
 
   appendRevision(input: CreateRevisionInput): Promise<NoteRevision>;
+}
+
+export interface TransformationRepository {
+  applyTransformation(input: ApplyTransformationInput): Promise<Note>;
 }

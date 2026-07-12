@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 import {
   ContextConfidenceSchema,
+  InferredFieldSchema,
   NoteStatusSchema,
   NoteTypeSchema,
   PrioritySchema,
@@ -32,6 +33,10 @@ interface NoteRow extends QueryResultRow {
   status: string;
   meeting_id: string | null;
   context_confidence: string;
+  reminder_intent: string | null;
+  explicit_due_at: Date | string | null;
+  inferred_fields: unknown;
+  uncertainties: unknown;
   transformation_version: string | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -47,6 +52,8 @@ interface NoteRevisionRow extends QueryResultRow {
   note_type: string | null;
   priority: string | null;
   status: string | null;
+  reminder_intent: string | null;
+  explicit_due_at: Date | string | null;
   transformation_version: string | null;
   inferred_fields: unknown;
   uncertainties: unknown;
@@ -69,7 +76,11 @@ const SAVE_DERIVED_SQL = `
       priority = $6,
       status = $7,
       context_confidence = $8,
-      transformation_version = $9
+      reminder_intent = $9,
+      explicit_due_at = $10,
+      inferred_fields = $11,
+      uncertainties = $12,
+      transformation_version = $13
   WHERE id = $1
     AND workspace_id = $2
     AND user_id = $3
@@ -87,11 +98,13 @@ const APPEND_REVISION_SQL = `
     note_type,
     priority,
     status,
+    reminder_intent,
+    explicit_due_at,
     transformation_version,
     inferred_fields,
     uncertainties
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
   RETURNING *
 `;
 
@@ -131,6 +144,10 @@ export class PostgresNoteRepository implements NoteRepository {
       update.priority,
       update.status,
       update.contextConfidence,
+      update.reminderIntent,
+      update.explicitDueAt,
+      JSON.stringify(update.inferredFields),
+      JSON.stringify(update.uncertainties),
       update.transformationVersion,
     ]);
 
@@ -153,6 +170,8 @@ export class PostgresNoteRepository implements NoteRepository {
       input.noteType,
       input.priority,
       input.status,
+      input.reminderIntent,
+      input.explicitDueAt,
       input.transformationVersion,
       JSON.stringify(input.inferredFields),
       JSON.stringify(input.uncertainties),
@@ -182,6 +201,10 @@ export class PostgresNoteRepository implements NoteRepository {
       contextConfidence: ContextConfidenceSchema.parse(
         row.context_confidence,
       ),
+      reminderIntent: row.reminder_intent,
+      explicitDueAt: this.optionalDate(row.explicit_due_at),
+      inferredFields: this.inferredFieldArray(row.inferred_fields),
+      uncertainties: this.stringArray(row.uncertainties),
       transformationVersion: row.transformation_version,
       createdAt: this.toDate(row.created_at),
       updatedAt: this.toDate(row.updated_at),
@@ -199,11 +222,17 @@ export class PostgresNoteRepository implements NoteRepository {
       noteType: row.note_type ? NoteTypeSchema.parse(row.note_type) : null,
       priority: row.priority ? PrioritySchema.parse(row.priority) : null,
       status: row.status ? NoteStatusSchema.parse(row.status) : null,
+      reminderIntent: row.reminder_intent,
+      explicitDueAt: this.optionalDate(row.explicit_due_at),
       transformationVersion: row.transformation_version,
-      inferredFields: this.stringArray(row.inferred_fields),
+      inferredFields: this.inferredFieldArray(row.inferred_fields),
       uncertainties: this.stringArray(row.uncertainties),
       createdAt: this.toDate(row.created_at),
     };
+  }
+
+  private inferredFieldArray(value: unknown): Note["inferredFields"] {
+    return this.stringArray(value).map((field) => InferredFieldSchema.parse(field));
   }
 
   private stringArray(value: unknown): string[] {
@@ -211,6 +240,10 @@ export class PostgresNoteRepository implements NoteRepository {
       throw new Error("Expected PostgreSQL JSON value to be a string array");
     }
     return value;
+  }
+
+  private optionalDate(value: Date | string | null): Date | null {
+    return value === null ? null : this.toDate(value);
   }
 
   private toDate(value: Date | string): Date {

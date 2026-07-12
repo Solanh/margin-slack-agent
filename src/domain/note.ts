@@ -34,17 +34,54 @@ export const ReminderStatusSchema = z.enum([
   "cancelled",
 ]);
 
+export const InferredFieldSchema = z.enum([
+  "organizedText",
+  "noteType",
+  "priority",
+  "reminderIntent",
+  "explicitDueAt",
+]);
+
 export const TransformationSchema = z.object({
-  organizedText: z.string().min(1),
-  noteType: NoteTypeSchema,
-  priority: PrioritySchema,
-  reminderIntent: z.string().nullable(),
-  explicitDueAt: z.string().datetime().nullable(),
-  inferredFields: z.array(z.string()),
-  uncertainties: z.array(z.string()),
+  organizedText: z
+    .string()
+    .min(1)
+    .describe(
+      "A conservative, concise restatement that preserves every explicit fact and never adds attribution, ownership, dates, or commitments.",
+    ),
+  noteType: NoteTypeSchema.describe(
+    "The single best structural category for the user's note.",
+  ),
+  priority: PrioritySchema.describe(
+    "Priority based only on explicit urgency signals. Use normal when urgency is not explicit.",
+  ),
+  reminderIntent: z
+    .string()
+    .nullable()
+    .describe(
+      "The reminder request expressed by the user, normalized conservatively, or null when no reminder was requested.",
+    ),
+  explicitDueAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .describe(
+      "An ISO 8601 timestamp only when the user supplied enough information to resolve an exact time; otherwise null.",
+    ),
+  inferredFields: z
+    .array(InferredFieldSchema)
+    .describe(
+      "Fields that contain model interpretation rather than directly verified data.",
+    ),
+  uncertainties: z
+    .array(z.string().min(1))
+    .describe(
+      "Concise unresolved ambiguities. Use an empty array only when no material ambiguity remains.",
+    ),
 });
 
 export type Transformation = z.infer<typeof TransformationSchema>;
+export type InferredField = z.infer<typeof InferredFieldSchema>;
 
 export interface OwnerScope {
   workspaceId: string;
@@ -79,6 +116,10 @@ export interface Note extends RawNote {
   status: z.infer<typeof NoteStatusSchema>;
   meetingId: string | null;
   contextConfidence: z.infer<typeof ContextConfidenceSchema>;
+  reminderIntent: string | null;
+  explicitDueAt: Date | null;
+  inferredFields: InferredField[];
+  uncertainties: string[];
   transformationVersion: string | null;
   updatedAt: Date;
 }
@@ -91,8 +132,10 @@ export interface NoteRevision extends OwnerScope {
   noteType: z.infer<typeof NoteTypeSchema> | null;
   priority: z.infer<typeof PrioritySchema> | null;
   status: z.infer<typeof NoteStatusSchema> | null;
+  reminderIntent: string | null;
+  explicitDueAt: Date | null;
   transformationVersion: string | null;
-  inferredFields: string[];
+  inferredFields: InferredField[];
   uncertainties: string[];
   createdAt: Date;
 }

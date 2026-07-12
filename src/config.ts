@@ -18,6 +18,11 @@ const EncryptionEnvironmentSchema = z.object({
   TOKEN_ENCRYPTION_KEY_VERSION: z.coerce.number().int().positive().default(1),
 });
 
+const AIEnvironmentSchema = z.object({
+  AI_API_KEY: z.string().min(1),
+  AI_MODEL: z.string().min(1),
+});
+
 const EnvironmentSchema = SlackEnvironmentSchema.merge(
   DatabaseEnvironmentSchema,
 );
@@ -25,6 +30,7 @@ const EnvironmentSchema = SlackEnvironmentSchema.merge(
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type DatabaseEnvironment = z.infer<typeof DatabaseEnvironmentSchema>;
 export type EncryptionEnvironment = z.infer<typeof EncryptionEnvironmentSchema>;
+export type AIEnvironment = z.infer<typeof AIEnvironmentSchema>;
 
 function formatConfigurationError(
   label: string,
@@ -71,6 +77,18 @@ export function loadEncryptionEnvironment(
 
   if (!result.success) {
     throw formatConfigurationError("token encryption", result.error);
+  }
+
+  return result.data;
+}
+
+export function loadAIEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): AIEnvironment {
+  const result = AIEnvironmentSchema.safeParse(source);
+
+  if (!result.success) {
+    throw formatConfigurationError("AI", result.error);
   }
 
   return result.data;
