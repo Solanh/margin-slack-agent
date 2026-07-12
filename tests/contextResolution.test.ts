@@ -58,12 +58,15 @@ function candidate(
   };
 }
 
+const seriesKey = "google:workflow-review@example.com";
+
 describe("context scoring", () => {
   it("auto-attaches one clear active Calendar event", () => {
     const scored = scoreCalendarCandidate(
       note,
       {
         providerEventId: "event-1",
+        seriesKey,
         title: "Workflow migration review",
         startsAt: new Date("2026-07-12T17:45:00.000Z"),
         endsAt: new Date("2026-07-12T18:30:00.000Z"),
@@ -108,6 +111,7 @@ describe("context scoring", () => {
       note,
       {
         providerEventId: "event-stale",
+        seriesKey,
         title: "Workflow migration review",
         startsAt: new Date("2026-07-12T17:30:00.000Z"),
         endsAt: new Date("2026-07-12T17:58:00.000Z"),
@@ -195,6 +199,7 @@ describe("ContextResolutionService", () => {
       listOverlappingEvents: vi.fn(async () => [
         {
           providerEventId: "event-1",
+          seriesKey,
           title: "Workflow migration review",
           startsAt: new Date("2026-07-12T17:45:00.000Z"),
           endsAt: new Date("2026-07-12T18:30:00.000Z"),
@@ -223,6 +228,9 @@ describe("ContextResolutionService", () => {
     const result = await service.resolveForNote(owner, note.id);
 
     expect(result.status).toBe("needs_clarification");
+    expect(meetings.save).toHaveBeenCalledWith(
+      expect.objectContaining({ seriesKey }),
+    );
     expect(candidates.persistResolution).toHaveBeenCalledWith(
       expect.objectContaining({
         ...owner,
