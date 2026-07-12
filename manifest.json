@@ -48,7 +48,8 @@
       "bot_events": [
         "app_home_opened",
         "app_context_changed",
-        "message.im"
+        "message.im",
+        "user_huddle_changed"
       ]
     },
     "interactivity": {

@@ -7,29 +7,34 @@ This guide installs Margin in a Slack developer sandbox using Socket Mode. A suc
 - Node.js 20 or newer
 - PostgreSQL configured according to [DATABASE_SETUP.md](DATABASE_SETUP.md)
 - an OpenAI API key and structured-output-capable model
+- Google OAuth configuration for Calendar matching
 - a Slack workspace with Agent features available
 - a fully featured developer sandbox if the normal workspace plan does not include the required Agent surfaces
 
-Slack's Agent messaging experience uses the app's Messages tab. Margin subscribes to `app_home_opened`, `app_context_changed`, and `message.im`.
+Margin subscribes to:
+
+- `app_home_opened`;
+- `app_context_changed`;
+- `message.im`;
+- `user_huddle_changed`.
 
 Official references:
 
 - https://docs.slack.dev/ai/developing-agents/
+- https://docs.slack.dev/ai/agent-context-management/
+- https://docs.slack.dev/reference/events/user_huddle_changed/
 - https://docs.slack.dev/reference/app-manifest/
 - https://docs.slack.dev/tools/bolt-js/concepts/actions/
 - https://docs.slack.dev/reference/methods/chat.update/
 
-## 1. Create the Slack app from the manifest
+## 1. Create or update the Slack app
 
 1. Open https://api.slack.com/apps.
-2. Select **Create New App**.
-3. Choose **From an app manifest**.
+2. Select **Create New App** or the existing Margin app.
+3. For a new app, choose **From an app manifest**.
 4. Select the developer sandbox workspace.
-5. Paste `manifest.json`.
-6. Review and create the app.
-7. Confirm that the Agent experience is enabled.
-
-The manifest enables Agent View, writable Messages, App Home, Socket Mode, and interactivity.
+5. Apply `manifest.json`.
+6. Confirm that Agent View, writable Messages, App Home, Socket Mode, interactivity, and all four event subscriptions are enabled.
 
 ## 2. Create an app-level Socket Mode token
 
@@ -47,7 +52,9 @@ The bot scopes are:
 - `im:history`
 - `users:read`
 
-`users:read` is used only to retrieve the current user's timezone. Reinstall the app after adding or changing scopes.
+`users:read` supports timezone lookup, current-user huddle profile refresh, and the `user_huddle_changed` event. The manifest intentionally does not request `calls:read`.
+
+Reinstall the app after applying the latest event subscriptions or scopes.
 
 Copy:
 
@@ -60,17 +67,7 @@ Copy:
 cp .env.example .env
 ```
 
-Set:
-
-```dotenv
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_SIGNING_SECRET=...
-SLACK_APP_TOKEN=xapp-...
-LOG_LEVEL=info
-DATABASE_URL=postgresql://...
-AI_API_KEY=...
-AI_MODEL=...
-```
+Set the Slack, database, AI, encryption, and Google OAuth variables described in `.env.example`.
 
 Then run:
 
@@ -83,51 +80,73 @@ npm run migrate
 npm start
 ```
 
-A successful connection prints:
-
-```text
-Margin is connected to Slack, PostgreSQL, and note organization.
-```
+A successful connection prints that Slack, PostgreSQL, note organization, Google OAuth, and expiring Slack context signals are active.
 
 ## 5. Verify the private note card
 
 1. Open Margin's **Messages** tab.
-2. Send:
+2. Send a private note.
+3. Confirm Margin posts one processing card and updates that same message.
+4. Confirm the original is labeled **User-provided · immutable**.
+5. Verify edit, priority, reminder, meeting, and verbatim controls.
+6. Confirm all card actions remain in the DM.
+
+## 6. Verify Calendar context
+
+Follow [GOOGLE_CALENDAR.md](GOOGLE_CALENDAR.md). Confirm one unambiguous event attaches, overlapping events remain choices, and disconnected or unavailable Calendar leaves a standalone note.
+
+## 7. Verify Slack huddle context
+
+1. Reinstall the latest manifest so `user_huddle_changed` is active.
+2. Start a Slack huddle as the test user.
+3. Send Margin a private note during the huddle.
+4. Confirm the note card attaches:
 
    ```text
-   Important: ask whether migration affects customer-created workflows. Remind me before planning.
+   Slack huddle (title unavailable)
    ```
 
-3. Confirm Margin posts one processing card in the same private thread.
-4. Confirm that message updates in place rather than producing a second final message.
-5. Confirm the final card shows:
-   - organized wording;
-   - original wording labeled **User-provided · immutable**;
-   - type and priority provenance;
-   - reminder state;
-   - unresolved meeting context when no meeting record exists;
-   - edit, priority, reminder, meeting, and verbatim controls.
-6. Select **Keep verbatim**, then **Use organized**, and confirm the same message updates both times.
-7. Edit the organized wording and confirm the original does not change.
-8. Change priority and confirm its provenance changes to **User-edited**.
-9. Open the reminder modal, save wording, then clear it.
-10. Open the meeting modal. Before Calendar integration, **No meeting** may be the only available choice.
+5. Confirm no participant names, channel title, audio, or transcript appear.
+6. End the huddle and capture another note; confirm no huddle attaches.
+7. Start a scheduled Calendar event and a huddle simultaneously. Confirm the huddle becomes selected while the Calendar candidate remains available in the meeting picker.
+8. Interrupt `users.info` or omit huddle metadata and confirm note capture still completes.
 
-## 6. Verify privacy and durability
+## 8. Verify Agent active-view context
 
-- Query `notes` and confirm `raw_text` exactly matches the Slack message.
-- Confirm `card_channel_id` begins with `D`.
-- Confirm `note_revisions` includes `ai` and `user` revisions after edits.
-- Try a repository-level non-DM card reference and confirm it is rejected.
-- Replay the same Slack event and confirm only one note row exists.
-- Stop PostgreSQL and confirm Margin never claims an unsaved note succeeded.
-- Confirm logs do not contain note text.
+1. Open Margin's Agent View while viewing a Slack channel or message.
+2. Trigger navigation among supported views.
+3. Inspect `slack_active_contexts` and confirm only:
+   - owner IDs;
+   - entity type;
+   - channel ID;
+   - optional message timestamp;
+   - observation and expiration times.
+4. Confirm no message body, channel name, canvas/list content, or history is stored.
+5. Confirm active-view context alone does not create a huddle meeting.
+
+## 9. Verify privacy and durability
+
+- `notes.raw_text` exactly matches the private message.
+- Card channel IDs begin with `D`.
+- Huddle rows exist only for users who already own Margin data.
+- Leaving a huddle deletes its active row.
+- Expired context rows are ignored and removed by cleanup.
+- `manifest.json` does not contain `calls:read`.
+- Logs do not contain note text, huddle payloads, tokens, authorization codes, or active-view content.
 
 ## Troubleshooting
 
-### Agent View or actions are missing
+### Huddle context never appears
 
-Apply the latest manifest and reinstall the app. Confirm `assistant:write` and interactivity are enabled.
+Apply and reinstall the latest manifest. Confirm `users:read` and `user_huddle_changed`. The event does not provide a verified title or participants; Margin deliberately uses a title-unavailable label.
+
+### Active view is absent
+
+Confirm Agent View is enabled and `app_context_changed` is subscribed. Unsupported canvas/list context is intentionally discarded.
+
+### A native huddle call ID is not resolved
+
+Expected. Margin does not call `calls.info`; Slack documents that API for Calls records created through `calls.add`, not native `huddle_state_call_id` values.
 
 ### Messages are not received
 
@@ -135,15 +154,11 @@ Confirm `message.im`, `im:history`, and a connected Socket Mode process.
 
 ### Note card stays on “Organizing”
 
-Check `AI_API_KEY`, `AI_MODEL`, model access, and application logs. The raw note remains stored even when organization fails.
-
-### Buttons work but the message does not update
-
-Confirm the bot has `chat:write`, the card is in a DM channel beginning with `D`, and the stored card timestamp matches the interacted message.
+Check AI configuration and logs. Raw capture remains durable even when context or organization fails.
 
 ### Time displays in UTC
 
-Confirm `users:read` was added and the app was reinstalled. Margin falls back to UTC when Slack timezone lookup fails.
+Confirm `users:read` and reinstall the app. UTC is the safe fallback.
 
 ### Database migration fails
 
@@ -151,4 +166,4 @@ Confirm PostgreSQL is reachable and the database user can create tables, constra
 
 ## Known limitation
 
-Actual sandbox installation and visual verification require workspace credentials. The repository contains the manifest, implementation, migrations, automated tests, and verification steps.
+Actual sandbox installation, live huddle behavior, and visual verification require workspace credentials. The repository contains the manifest, implementation, migrations, automated tests, and exact verification procedure.

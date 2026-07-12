@@ -17,6 +17,8 @@ import {
 import { NoteCardService } from "./services/noteCard.js";
 import { OpenAITransformationModel } from "./services/openAITransformationModel.js";
 import { OrganizeNoteService } from "./services/organizeNote.js";
+import { SlackContextSignalService } from "./services/slackContextSignals.js";
+import { SlackHuddleContextResolver } from "./services/slackHuddleContextResolver.js";
 import { createSlackApp } from "./slack/app.js";
 import { createPostgresPool } from "./storage/postgres.js";
 import { PostgresMeetingRepository } from "./storage/postgresMeetingRepository.js";
@@ -24,6 +26,7 @@ import { PostgresNoteInteractionRepository } from "./storage/postgresNoteInterac
 import { PostgresNoteRepository } from "./storage/postgresNoteRepository.js";
 import { PostgresOAuthAuthorizationStateRepository } from "./storage/postgresOAuthAuthorizationStateRepository.js";
 import { PostgresOAuthConnectionRepository } from "./storage/postgresOAuthConnectionRepository.js";
+import { PostgresSlackContextSignalRepository } from "./storage/postgresSlackContextSignalRepository.js";
 import { PostgresTransformationRepository } from "./storage/postgresTransformationRepository.js";
 
 const environment = loadEnvironment();
@@ -51,6 +54,16 @@ const oauthConnectionRepository = new PostgresOAuthConnectionRepository(
   cipher,
 );
 const oauthStateRepository = new PostgresOAuthAuthorizationStateRepository(pool);
+const slackContextSignalRepository =
+  new PostgresSlackContextSignalRepository(pool);
+const slackContextSignals = new SlackContextSignalService(
+  slackContextSignalRepository,
+);
+const slackHuddleContextResolver = new SlackHuddleContextResolver(
+  noteRepository,
+  meetingRepository,
+  slackContextSignals,
+);
 const googleOAuthClient = new GoogleCalendarOAuthClient({
   clientId: googleEnvironment.GOOGLE_CLIENT_ID,
   clientSecret: googleEnvironment.GOOGLE_CLIENT_SECRET,
@@ -100,14 +113,17 @@ const app = createSlackApp(environment, {
   noteCards,
   calendarContextResolver,
   calendarConnections,
+  slackContextSignals,
+  slackHuddleContextResolver,
 });
 
 async function start(): Promise<void> {
   await pool.query("SELECT 1");
+  await slackContextSignals.deleteExpired();
   await callbackServer.start();
   await app.start();
   console.log(
-    "Margin is connected to Slack, PostgreSQL, note organization, and Google OAuth.",
+    "Margin is connected to Slack, PostgreSQL, note organization, Google OAuth, and expiring Slack context signals.",
   );
 }
 

@@ -7,6 +7,8 @@ import type {
   OrganizeNoteInput,
   OrganizeNoteService,
 } from "../services/organizeNote.js";
+import type { SlackContextSignalService } from "../services/slackContextSignals.js";
+import type { SlackHuddleContextResolver } from "../services/slackHuddleContextResolver.js";
 import {
   buildCaptureFailureAcknowledgement,
 } from "./views/captureAcknowledgement.js";
@@ -24,6 +26,7 @@ interface UserTextMessage {
   ts: string;
   thread_ts?: string;
   user: string;
+  app_context?: unknown;
 }
 
 interface SlackMessagePayload {
@@ -43,6 +46,8 @@ export interface SlackListenerDependencies {
   noteCards: NoteCardService;
   calendarContextResolver: CalendarContextResolver;
   calendarConnections: GoogleCalendarConnectionService;
+  slackContextSignals: SlackContextSignalService;
+  slackHuddleContextResolver: SlackHuddleContextResolver;
 }
 
 interface HandlePrivateNoteInput {
@@ -51,6 +56,8 @@ interface HandlePrivateNoteInput {
   capture: RawNoteCapturer["capture"];
   organize: OrganizeNoteService["organize"];
   resolveCalendarContext: CalendarContextResolver["resolveForNote"];
+  resolveSlackHuddleContext: SlackHuddleContextResolver["resolveForNote"];
+  refreshSlackSignals: () => Promise<void>;
   recordCardReference: NoteCardService["recordCardReference"];
   getCardData: NoteCardService["getCardData"];
   post: (message: SlackMessagePayload) => Promise<SlackPostResult>;
@@ -125,6 +132,8 @@ export async function handlePrivateNoteMessage({
   capture,
   organize,
   resolveCalendarContext,
+  resolveSlackHuddleContext,
+  refreshSlackSignals,
   recordCardReference,
   getCardData,
   post,
@@ -188,6 +197,12 @@ export async function handlePrivateNoteMessage({
     logError("Raw note saved, but processing card could not be posted", error);
   }
 
+  try {
+    await refreshSlackSignals();
+  } catch (error) {
+    logError("Slack context signal refresh failed; continuing without it", error);
+  }
+
   let timeZone = "UTC";
   try {
     timeZone = await resolveTimeZone();
@@ -195,17 +210,29 @@ export async function handlePrivateNoteMessage({
     logError("Unable to resolve user timezone; using UTC", error);
   }
 
-  let verifiedMeeting = null;
+  let calendarMeeting = null;
   try {
     const resolution = await resolveCalendarContext(
       { workspaceId, userId: message.user },
       rawNote.id,
     );
-    verifiedMeeting = resolution.selected;
+    calendarMeeting = resolution.selected;
   } catch (error) {
-    // Context is optional. Failures never block organization or card delivery.
     logError("Calendar context resolution failed; continuing standalone", error);
   }
+
+  let huddleMeeting = null;
+  try {
+    const resolution = await resolveSlackHuddleContext(
+      { workspaceId, userId: message.user },
+      rawNote.id,
+    );
+    huddleMeeting = resolution.selected;
+  } catch (error) {
+    logError("Slack huddle resolution failed; continuing without it", error);
+  }
+
+  const verifiedMeeting = huddleMeeting ?? calendarMeeting;
 
   try {
     const organizeInput: OrganizeNoteInput = {
@@ -219,8 +246,6 @@ export async function handlePrivateNoteMessage({
     }
     await organize(organizeInput);
   } catch (error) {
-    // OrganizeNoteService normally returns a verbatim result; this protects the
-    // card flow from unexpected programming or infrastructure failures.
     logError("Unexpected note organization failure", error);
   }
 
@@ -262,6 +287,16 @@ export function registerSlackListeners(
           })
         : false;
 
+      if (workspaceId && event.context) {
+        await dependencies.slackContextSignals.recordAppContext(
+          { workspaceId, userId: event.user },
+          event.context,
+          slackEventDate(event.event_ts),
+          event.event_ts,
+          false,
+        );
+      }
+
       await client.views.publish({
         user_id: event.user,
         view: buildMarginHomeView({ calendarConnected }),
@@ -271,9 +306,38 @@ export function registerSlackListeners(
     }
   });
 
-  app.event("app_context_changed", async ({ logger }) => {
-    // Issue #7 evaluates and stores only minimal supported context signals.
-    logger.debug("Slack Agent View context changed");
+  app.event("app_context_changed", async ({ event, body, logger }) => {
+    try {
+      const workspaceId = getWorkspaceId(body);
+      if (!workspaceId) {
+        throw new Error("Slack app context event is missing workspace context");
+      }
+
+      await dependencies.slackContextSignals.recordAppContext(
+        { workspaceId, userId: event.user },
+        event.context,
+        slackEventDate(event.event_ts),
+        event.event_ts,
+      );
+    } catch (error) {
+      logger.error("Unable to cache Slack active-view context", error);
+    }
+  });
+
+  app.event("user_huddle_changed", async ({ event, body, logger }) => {
+    try {
+      const workspaceId = getWorkspaceId(body);
+      if (!workspaceId) {
+        throw new Error("Slack huddle event is missing workspace context");
+      }
+
+      await dependencies.slackContextSignals.recordHuddleEvent(
+        workspaceId,
+        event,
+      );
+    } catch (error) {
+      logger.error("Unable to cache Slack huddle state", error);
+    }
   });
 
   app.message(async ({ message, body, say, client, logger }) => {
@@ -292,22 +356,49 @@ export function registerSlackListeners(
       return;
     }
 
+    const owner = { workspaceId, userId: message.user };
+    let userInfoPromise: ReturnType<typeof client.users.info> | null = null;
+    const getUserInfo = () => {
+      userInfoPromise ??= client.users.info({ user: message.user });
+      return userInfoPromise;
+    };
+
     await handlePrivateNoteMessage({
       workspaceId,
       message,
       capture: (input) => dependencies.rawNoteCapturer.capture(input),
       organize: (input) => dependencies.organizer.organize(input),
-      resolveCalendarContext: (owner, noteId) =>
-        dependencies.calendarContextResolver.resolveForNote(owner, noteId),
-      recordCardReference: (owner, noteId, reference) =>
-        dependencies.noteCards.recordCardReference(owner, noteId, reference),
-      getCardData: (owner, noteId) =>
-        dependencies.noteCards.getCardData(owner, noteId),
+      resolveCalendarContext: (scope, noteId) =>
+        dependencies.calendarContextResolver.resolveForNote(scope, noteId),
+      resolveSlackHuddleContext: (scope, noteId) =>
+        dependencies.slackHuddleContextResolver.resolveForNote(scope, noteId),
+      refreshSlackSignals: async () => {
+        const observedAt = new Date();
+        const response = await getUserInfo();
+        await Promise.all([
+          dependencies.slackContextSignals.recordHuddleUserProfile(
+            owner,
+            response.user,
+            observedAt,
+          ),
+          dependencies.slackContextSignals.recordAppContext(
+            owner,
+            message.app_context,
+            observedAt,
+            message.ts,
+            false,
+          ),
+        ]);
+      },
+      recordCardReference: (scope, noteId, reference) =>
+        dependencies.noteCards.recordCardReference(scope, noteId, reference),
+      getCardData: (scope, noteId) =>
+        dependencies.noteCards.getCardData(scope, noteId),
       post: (response) => say(response as never) as Promise<SlackPostResult>,
       update: (response) => client.chat.update(response as never),
       resolveTimeZone: async () => {
         try {
-          const response = await client.users.info({ user: message.user });
+          const response = await getUserInfo();
           return response.user?.tz ?? "UTC";
         } catch {
           return "UTC";
@@ -316,4 +407,9 @@ export function registerSlackListeners(
       logError: (description, error) => logger.error(description, error),
     });
   });
+}
+
+function slackEventDate(eventTs: string): Date {
+  const seconds = Number.parseFloat(eventTs);
+  return Number.isFinite(seconds) ? new Date(seconds * 1000) : new Date();
 }
