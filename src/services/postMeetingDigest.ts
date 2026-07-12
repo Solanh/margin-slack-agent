@@ -10,6 +10,7 @@ import {
   buildPostMeetingDigestBlocks,
   buildPostMeetingDigestFallback,
 } from "../slack/views/postMeetingDigest.js";
+import { nextDurableSlackRetryAt } from "../slack/slackApiExecutor.js";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const DEFAULT_BATCH_SIZE = 20;
@@ -72,12 +73,11 @@ export class PostMeetingDigestService {
           }
         } catch (error) {
           failed += 1;
-          const retryAt = new Date(now.getTime() + retryDelayMs(digest.attempts));
           await this.repository.markFailed(
             ownerOf(digest),
             digest.id,
             safeErrorCode(error),
-            retryAt,
+            nextDurableSlackRetryAt(error, now, digest.attempts),
           );
         }
       }
@@ -147,11 +147,6 @@ export class PostMeetingDigestService {
 
 function ownerOf(digest: PostMeetingDigest): OwnerScope {
   return { workspaceId: digest.workspaceId, userId: digest.userId };
-}
-
-function retryDelayMs(attempts: number): number {
-  const exponent = Math.max(0, Math.min(6, attempts - 1));
-  return Math.min(60 * 60 * 1000, 60_000 * 2 ** exponent);
 }
 
 function safeErrorCode(error: unknown): string {
