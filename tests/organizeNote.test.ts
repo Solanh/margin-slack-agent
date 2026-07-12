@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Note } from "../src/domain/note.js";
+import { OpenAITransformationRefusalError } from "../src/services/openAITransformationModel.js";
 import { OrganizeNoteService } from "../src/services/organizeNote.js";
 import type { TransformationModel } from "../src/services/transformation.js";
 import type {
@@ -119,6 +120,36 @@ describe("OrganizeNoteService", () => {
       note: rawNote,
       reason: "provider_failure",
     });
+    expect(transformations.applyTransformation).not.toHaveBeenCalled();
+  });
+
+  it("keeps the note verbatim and classifies a model refusal separately", async () => {
+    const transformations: TransformationRepository = {
+      applyTransformation: vi.fn(),
+    };
+    const service = new OrganizeNoteService(
+      noteRepository(),
+      transformations,
+      {
+        async transform() {
+          throw new OpenAITransformationRefusalError();
+        },
+      },
+    );
+
+    const result = await service.organize({
+      workspaceId: "T123",
+      userId: "U123",
+      noteId: "note-1",
+      userTimeZone: "America/New_York",
+    });
+
+    expect(result).toEqual({
+      status: "verbatim",
+      note: rawNote,
+      reason: "model_refusal",
+    });
+    expect(result.note.rawText).toBe(rawNote.rawText);
     expect(transformations.applyTransformation).not.toHaveBeenCalled();
   });
 
