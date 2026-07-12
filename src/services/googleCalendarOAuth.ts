@@ -48,6 +48,13 @@ export class GoogleOAuthError extends Error {
   }
 }
 
+export class GoogleCalendarNotConfiguredError extends Error {
+  constructor() {
+    super("Google Calendar integration is not configured");
+    this.name = "GoogleCalendarNotConfiguredError";
+  }
+}
+
 export class GoogleCalendarOAuthClient {
   constructor(
     private readonly configuration: GoogleOAuthConfiguration,
@@ -179,33 +186,43 @@ export class GoogleCalendarOAuthClient {
 
 export class GoogleCalendarConnectionService {
   constructor(
-    private readonly states: OAuthAuthorizationStateRepository,
-    private readonly connections: OAuthConnectionRepository,
-    private readonly oauthClient: GoogleCalendarOAuthClient,
+    private readonly states: OAuthAuthorizationStateRepository | null,
+    private readonly connections: OAuthConnectionRepository | null,
+    private readonly oauthClient: GoogleCalendarOAuthClient | null,
   ) {}
 
+  static disabled(): GoogleCalendarConnectionService {
+    return new GoogleCalendarConnectionService(null, null, null);
+  }
+
+  isAvailable(): boolean {
+    return Boolean(this.states && this.connections && this.oauthClient);
+  }
+
   async createAuthorizationUrl(owner: OwnerScope): Promise<string> {
-    const authorizationState = await this.states.create(
+    const { states, oauthClient } = this.requireConfigured();
+    const authorizationState = await states.create(
       owner,
       "google_calendar",
       new Date(Date.now() + STATE_LIFETIME_MS),
     );
 
-    return this.oauthClient.buildAuthorizationUrl(authorizationState.state);
+    return oauthClient.buildAuthorizationUrl(authorizationState.state);
   }
 
   async completeAuthorization(
     state: string,
     code: string,
   ): Promise<OAuthConnection> {
-    const owner = await this.states.consume(state, "google_calendar");
+    const { states, connections, oauthClient } = this.requireConfigured();
+    const owner = await states.consume(state, "google_calendar");
     if (!owner) {
       throw new GoogleOAuthError("OAuth state is invalid, expired, or already used");
     }
 
     const [tokenSet, existing] = await Promise.all([
-      this.oauthClient.exchangeCode(code),
-      this.connections.get(owner, "google_calendar"),
+      oauthClient.exchangeCode(code),
+      connections.get(owner, "google_calendar"),
     ]);
     const refreshToken = tokenSet.refreshToken ?? existing?.refreshToken ?? null;
     if (!refreshToken) {
@@ -214,7 +231,7 @@ export class GoogleCalendarConnectionService {
       );
     }
 
-    return this.connections.save({
+    return connections.save({
       ...owner,
       provider: "google_calendar",
       accessToken: tokenSet.accessToken,
@@ -225,6 +242,9 @@ export class GoogleCalendarConnectionService {
   }
 
   async isConnected(owner: OwnerScope): Promise<boolean> {
+    if (!this.connections) {
+      return false;
+    }
     return (
       (await this.connections.get(owner, "google_calendar")) !== null
     );
@@ -234,6 +254,10 @@ export class GoogleCalendarConnectionService {
     disconnected: boolean;
     revokedRemotely: boolean;
   }> {
+    if (!this.connections || !this.oauthClient) {
+      return { disconnected: false, revokedRemotely: false };
+    }
+
     const connection = await this.connections.get(owner, "google_calendar");
     if (!connection) {
       return { disconnected: false, revokedRemotely: false };
@@ -250,5 +274,20 @@ export class GoogleCalendarConnectionService {
 
     await this.connections.delete(owner, "google_calendar");
     return { disconnected: true, revokedRemotely };
+  }
+
+  private requireConfigured(): {
+    states: OAuthAuthorizationStateRepository;
+    connections: OAuthConnectionRepository;
+    oauthClient: GoogleCalendarOAuthClient;
+  } {
+    if (!this.states || !this.connections || !this.oauthClient) {
+      throw new GoogleCalendarNotConfiguredError();
+    }
+    return {
+      states: this.states,
+      connections: this.connections,
+      oauthClient: this.oauthClient,
+    };
   }
 }
