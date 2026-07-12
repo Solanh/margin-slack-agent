@@ -92,7 +92,11 @@ describe("handlePrivateNoteMessage", () => {
           priority: "normal" as const,
           reminderIntent: null,
           explicitDueAt: null,
-          inferredFields: ["organizedText", "noteType", "priority"] as const,
+          inferredFields: [
+            "organizedText",
+            "noteType",
+            "priority",
+          ] as Array<"organizedText" | "noteType" | "priority">,
           uncertainties: [],
         },
       };
