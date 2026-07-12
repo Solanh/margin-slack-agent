@@ -16,18 +16,18 @@ const RETRIEVAL_PATTERNS = [
 ];
 
 const NOTE_TYPE_PATTERNS = [
-  { type: "decision" as const, pattern: /\bdecisions?\b/giu },
-  { type: "action" as const, pattern: /\b(?:actions?|tasks?|todos?|to-dos?)\b/giu },
-  { type: "question" as const, pattern: /\bquestions?\b/giu },
-  { type: "idea" as const, pattern: /\bideas?\b/giu },
-  { type: "reference" as const, pattern: /\breferences?\b/giu },
+  { type: "decision" as const, pattern: /\bdecisions?\b/iu },
+  { type: "action" as const, pattern: /\b(?:actions?|tasks?|todos?|to-dos?)\b/iu },
+  { type: "question" as const, pattern: /\bquestions?\b/iu },
+  { type: "idea" as const, pattern: /\bideas?\b/iu },
+  { type: "reference" as const, pattern: /\breferences?\b/iu },
 ];
 
 const PRIORITY_PATTERNS = [
-  { priority: "critical" as const, pattern: /\bcritical(?:\s+priority)?\b/giu },
-  { priority: "high" as const, pattern: /\bhigh(?:\s+priority)?\b/giu },
-  { priority: "normal" as const, pattern: /\bnormal(?:\s+priority)?\b/giu },
-  { priority: "low" as const, pattern: /\blow(?:\s+priority)?\b/giu },
+  { priority: "critical" as const, pattern: /\bcritical(?:\s+priority)?\b/iu },
+  { priority: "high" as const, pattern: /\bhigh(?:\s+priority)?\b/iu },
+  { priority: "normal" as const, pattern: /\bnormal(?:\s+priority)?\b/iu },
+  { priority: "low" as const, pattern: /\blow(?:\s+priority)?\b/iu },
 ];
 
 const STOP_WORDS = new Set([
@@ -111,14 +111,20 @@ export function parseNoteRetrievalRequest(
   for (const entry of NOTE_TYPE_PATTERNS) {
     if (entry.pattern.test(searchable)) {
       noteTypes.push(entry.type);
-      searchable = searchable.replace(entry.pattern, " ");
+      searchable = searchable.replace(
+        new RegExp(entry.pattern.source, "giu"),
+        " ",
+      );
     }
   }
 
   for (const entry of PRIORITY_PATTERNS) {
     if (entry.pattern.test(searchable)) {
       priorities.push(entry.priority);
-      searchable = searchable.replace(entry.pattern, " ");
+      searchable = searchable.replace(
+        new RegExp(entry.pattern.source, "giu"),
+        " ",
+      );
     }
   }
 
