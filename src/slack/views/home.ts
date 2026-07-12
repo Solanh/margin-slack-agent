@@ -1,13 +1,27 @@
 import { loadGoogleEnvironment } from "../../config.js";
+import type { UserDataSettings } from "../../storage/userDataRepository.js";
 
 export interface MarginHomeViewState {
   calendarAvailable?: boolean;
   calendarConnected: boolean;
+  dataSettings?: UserDataSettings;
 }
+
+const DEFAULT_DATA_SETTINGS: UserDataSettings = {
+  digestsEnabled: true,
+  resurfacingEnabled: true,
+  retentionDays: null,
+};
 
 export function buildMarginHomeView(state: MarginHomeViewState) {
   const calendarAvailable =
     state.calendarAvailable ?? loadGoogleEnvironment().enabled;
+  const dataSettings = state.dataSettings ?? DEFAULT_DATA_SETTINGS;
+  const notificationsEnabled =
+    dataSettings.digestsEnabled && dataSettings.resurfacingEnabled;
+  const retentionLabel = dataSettings.retentionDays
+    ? `${dataSettings.retentionDays} days`
+    : "Keep until I delete";
   const calendarSection = calendarAvailable
     ? {
         type: "section" as const,
@@ -74,13 +88,68 @@ export function buildMarginHomeView(state: MarginHomeViewState) {
           },
         ],
       },
-      {
-        type: "divider" as const,
-      },
+      { type: "divider" as const },
       calendarSection,
+      { type: "divider" as const },
       {
-        type: "divider" as const,
+        type: "section" as const,
+        text: {
+          type: "mrkdwn" as const,
+          text: `*Data and privacy*\nRetention: *${retentionLabel}*\nProactive digests and resurfacing: *${notificationsEnabled ? "Enabled" : "Disabled"}*`,
+        },
       },
+      {
+        type: "actions" as const,
+        block_id: "margin_data_controls",
+        elements: [
+          {
+            type: "button" as const,
+            action_id: "margin_export_data",
+            text: { type: "plain_text" as const, text: "Export my data" },
+          },
+          {
+            type: "button" as const,
+            action_id: "margin_retention_settings",
+            text: { type: "plain_text" as const, text: "Retention" },
+          },
+          {
+            type: "button" as const,
+            action_id: "margin_toggle_notifications",
+            value: notificationsEnabled ? "disable" : "enable",
+            text: {
+              type: "plain_text" as const,
+              text: notificationsEnabled
+                ? "Disable notifications"
+                : "Enable notifications",
+            },
+          },
+          {
+            type: "button" as const,
+            action_id: "margin_delete_all_data",
+            style: "danger" as const,
+            text: { type: "plain_text" as const, text: "Delete all data" },
+            confirm: {
+              title: { type: "plain_text" as const, text: "Delete all Margin data?" },
+              text: {
+                type: "mrkdwn" as const,
+                text: "This permanently deletes your notes, revisions, reminders, meeting context, notification jobs, preferences, and connected integration credentials. This cannot be undone.",
+              },
+              confirm: { type: "plain_text" as const, text: "Delete everything" },
+              deny: { type: "plain_text" as const, text: "Cancel" },
+            },
+          },
+        ],
+      },
+      {
+        type: "context" as const,
+        elements: [
+          {
+            type: "mrkdwn" as const,
+            text: "Exports are delivered only to your private Margin DM. OAuth tokens and authorization state are never included.",
+          },
+        ],
+      },
+      { type: "divider" as const },
       {
         type: "section" as const,
         text: {
