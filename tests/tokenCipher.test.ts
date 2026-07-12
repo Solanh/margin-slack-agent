@@ -16,10 +16,14 @@ describe("AesGcmTokenCipher", () => {
 
   it("rejects tampered ciphertext", () => {
     const cipher = new AesGcmTokenCipher(randomBytes(32));
-    const encrypted = cipher.encrypt("secret-token");
-    const tampered = `${encrypted.slice(0, -1)}${encrypted.endsWith("A") ? "B" : "A"}`;
+    const parts = cipher.encrypt("secret-token").split(".");
+    const authTag = parts[2];
+    if (!authTag) {
+      throw new Error("Encrypted token did not include an auth tag");
+    }
+    parts[2] = `${authTag.startsWith("A") ? "B" : "A"}${authTag.slice(1)}`;
 
-    expect(() => cipher.decrypt(tampered)).toThrow(
+    expect(() => cipher.decrypt(parts.join("."))).toThrow(
       "Encrypted token authentication failed",
     );
   });
