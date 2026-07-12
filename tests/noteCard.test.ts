@@ -73,7 +73,7 @@ describe("note card", () => {
     );
 
     expect(rendered).not.toContain("<@U999>");
-    expect(rendered).toContain("&amp;lt;@U999&amp;gt;");
+    expect(rendered).toContain("&lt;@U999&gt;");
     expect(escapeSlackMrkdwn("<&>")).toBe("&lt;&amp;&gt;");
   });
 
