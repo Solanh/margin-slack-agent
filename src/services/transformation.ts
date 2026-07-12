@@ -1,15 +1,15 @@
 import {
-  ContextConfidenceSchema,
   TransformationSchema,
+  type MeetingContext,
   type Transformation,
 } from "../domain/note.js";
 
 export interface TransformationInput {
   rawText: string;
-  verifiedMeetingTitle?: string;
-  verifiedMeetingStartsAt?: Date;
-  verifiedMeetingEndsAt?: Date;
-  contextConfidence?: typeof ContextConfidenceSchema._output;
+  verifiedMeetingTitle?: string | undefined;
+  verifiedMeetingStartsAt?: Date | undefined;
+  verifiedMeetingEndsAt?: Date | undefined;
+  contextConfidence?: MeetingContext["confidence"] | undefined;
   userTimeZone: string;
 }
 
