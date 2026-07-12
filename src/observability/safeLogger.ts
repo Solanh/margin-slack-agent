@@ -163,7 +163,10 @@ export function describeError(error: unknown): SafeErrorDescriptor {
   const name =
     error instanceof Error
       ? safeLabel(error.name, "Error")
-      : safeLabel(typeof record?.name === "string" ? record.name : "UnknownError", "UnknownError");
+      : safeLabel(
+          typeof record?.name === "string" ? record.name : "UnknownError",
+          "UnknownError",
+        );
   const code = safeCode(record?.code);
   const status = safeNumber(record?.status ?? record?.statusCode);
   const retryAfterSeconds = safeNumber(
@@ -273,7 +276,7 @@ function redactString(value: string): string {
   return value
     .replace(/\b(?:xox[baprs]-|xapp-|sk-)[A-Za-z0-9_-]+\b/gu, "[REDACTED_TOKEN]")
     .replace(/Bearer\s+[^\s]+/giu, "Bearer [REDACTED]")
-    .replace(/[?&](?:code|state|token|access_token|refresh_token)=[^&\s]+/giu, "&$1=[REDACTED]")
+    .replace(/([?&](?:code|state|token|access_token|refresh_token)=)[^&\s]+/giu, "$1[REDACTED]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[REDACTED_EMAIL]")
     .slice(0, 500);
 }
