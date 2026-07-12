@@ -7,6 +7,7 @@ import {
 } from "./config.js";
 import { ApplicationHttpServer } from "./http/applicationHttpServer.js";
 import { RuntimeReadiness } from "./http/readiness.js";
+import { describeError } from "./observability/safeLogger.js";
 import { AesGcmTokenCipher } from "./security/tokenCipher.js";
 import { CaptureRawNoteService } from "./services/captureRawNote.js";
 import { ContextResolutionService } from "./services/contextResolution.js";
@@ -212,7 +213,7 @@ process.on("SIGTERM", () => {
 });
 
 start().catch(async (error: unknown) => {
-  console.error("Margin failed to start", error);
+  console.error("Margin failed to start", describeError(error));
   resurfacingWorker?.stop();
   readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
