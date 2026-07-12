@@ -18,6 +18,7 @@ import type {
   CreateRevisionInput,
   NoteRepository,
   SaveDerivedNoteInput,
+  SetMeetingContextInput,
 } from "./noteRepository.js";
 import { PostgresRawNoteRepository } from "./postgresRawNoteRepository.js";
 
@@ -93,6 +94,16 @@ const SAVE_DERIVED_SQL = `
   RETURNING *
 `;
 
+const SET_MEETING_CONTEXT_SQL = `
+  UPDATE notes
+  SET meeting_id = $4,
+      context_confidence = $5
+  WHERE id = $1
+    AND workspace_id = $2
+    AND user_id = $3
+  RETURNING *
+`;
+
 const APPEND_REVISION_SQL = `
   INSERT INTO note_revisions (
     id,
@@ -162,6 +173,23 @@ export class PostgresNoteRepository implements NoteRepository {
     const row = result.rows[0];
     if (!row) {
       throw new Error("Owner-scoped note was not found for update");
+    }
+
+    return this.mapNote(row);
+  }
+
+  async setMeetingContext(input: SetMeetingContextInput): Promise<Note> {
+    const result = await this.pool.query<NoteRow>(SET_MEETING_CONTEXT_SQL, [
+      input.noteId,
+      input.workspaceId,
+      input.userId,
+      input.meetingId,
+      input.contextConfidence,
+    ]);
+
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error("Owner-scoped note was not found for meeting context");
     }
 
     return this.mapNote(row);
@@ -245,7 +273,9 @@ export class PostgresNoteRepository implements NoteRepository {
   }
 
   private inferredFieldArray(value: unknown): Note["inferredFields"] {
-    return this.stringArray(value).map((field) => InferredFieldSchema.parse(field));
+    return this.stringArray(value).map((field) =>
+      InferredFieldSchema.parse(field),
+    );
   }
 
   private stringArray(value: unknown): string[] {
