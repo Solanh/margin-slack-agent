@@ -52,7 +52,7 @@ Margin does **not** record audio, transcribe meetings, summarize entire channels
 
 ## Repository status
 
-The current stacked implementation covers issues #1 through #4:
+The current stacked implementation covers issues #1 through #5:
 
 - current Slack `agent_view` manifest;
 - writable Messages tab and App Home;
@@ -65,15 +65,17 @@ The current stacked implementation covers issues #1 through #4:
 - versioned structured note transformation;
 - strict Zod output validation and inference labels;
 - tool-free OpenAI Responses integration with `store: false`;
-- transactional current-state and revision persistence;
-- verbatim fallback for provider, validation, or persistence failure;
+- one private processing message updated in place with the final note card;
+- explicit user-provided, verified, inferred, user-edited, and unresolved labels;
+- edit, priority, reminder, meeting, and reversible verbatim controls;
+- transactional user revisions and DM-only card references;
 - PostgreSQL-backed integration tests in CI.
 
-The transformation service is intentionally not yet invoked from the Slack acknowledgement path. Issue #5 will render the organized result and establish the interactive note-card flow.
+Calendar and huddle integrations will populate verified meeting choices in later issues. Reminder wording is editable now; scheduled reminder delivery is implemented by the reminder workflow.
 
 ## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), and [structured transformation](docs/TRANSFORMATION.md).
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [structured transformation](docs/TRANSFORMATION.md), and [interactive note cards](docs/NOTE_CARD.md).
 
 ```bash
 cp .env.example .env
@@ -91,6 +93,7 @@ npm start
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
 - [Database schema and ownership](docs/SCHEMA.md)
 - [Structured note transformation](docs/TRANSFORMATION.md)
+- [Interactive private note card](docs/NOTE_CARD.md)
 - [Product specification](docs/PRODUCT_SPEC.md)
 - [Market and competitive research](docs/MARKET_VALIDATION.md)
 - [User flows](docs/USER_FLOWS.md)
