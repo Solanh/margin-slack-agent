@@ -45,6 +45,7 @@ BEGIN
     SELECT 1
     FROM pg_constraint
     WHERE conname = 'notes_owner_identity'
+      AND conrelid = 'notes'::regclass
   ) THEN
     ALTER TABLE notes
       ADD CONSTRAINT notes_owner_identity
@@ -59,12 +60,13 @@ BEGIN
     SELECT 1
     FROM pg_constraint
     WHERE conname = 'notes_meeting_owner_fk'
+      AND conrelid = 'notes'::regclass
   ) THEN
     ALTER TABLE notes
       ADD CONSTRAINT notes_meeting_owner_fk
       FOREIGN KEY (meeting_id, workspace_id, user_id)
       REFERENCES meetings (id, workspace_id, user_id)
-      ON DELETE SET NULL (meeting_id);
+      ON DELETE RESTRICT;
   END IF;
 END
 $$;
@@ -126,7 +128,12 @@ CREATE TABLE IF NOT EXISTS reminders (
   CONSTRAINT reminders_schedule_shape CHECK (
     (reminder_type = 'fixed' AND scheduled_for IS NOT NULL AND relative_rule IS NULL)
     OR
-    (reminder_type = 'event_relative' AND scheduled_for IS NULL AND relative_rule IS NOT NULL)
+    (
+      reminder_type = 'event_relative'
+      AND scheduled_for IS NULL
+      AND relative_rule IS NOT NULL
+      AND jsonb_typeof(relative_rule) = 'object'
+    )
   )
 );
 
