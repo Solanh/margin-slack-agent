@@ -14,7 +14,7 @@ const parsedTransformation = {
 
 describe("OpenAITransformationModel", () => {
   it("uses structured Responses output without tools or server storage", async () => {
-    const parse = vi.fn(async () => ({
+    const parse = vi.fn(async (_request: unknown) => ({
       output_parsed: parsedTransformation,
     }));
     const client = {
@@ -61,7 +61,7 @@ describe("OpenAITransformationModel", () => {
   it("rejects a response with no parsed structured output", async () => {
     const client = {
       responses: {
-        parse: vi.fn(async () => ({ output_parsed: null })),
+        parse: vi.fn(async (_request: unknown) => ({ output_parsed: null })),
       },
     } as unknown as OpenAI;
     const model = new OpenAITransformationModel(
