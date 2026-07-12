@@ -1,0 +1,60 @@
+{
+  "_metadata": {
+    "major_version": 2,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "Margin",
+    "description": "Private meeting memory for Slack.",
+    "long_description": "Margin is a private meeting-memory agent for Slack. Send it a short note during a huddle or scheduled meeting, and it preserves the original text, attaches trustworthy meeting context, organizes the note, and resurfaces it when it becomes useful.",
+    "background_color": "#2F3136"
+  },
+  "features": {
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "agent_view": {
+      "agent_description": "Capture private meeting notes without recording the meeting. Margin preserves your original words and adds context, organization, reminders, and retrieval.",
+      "suggested_prompts": [
+        {
+          "title": "Capture a note",
+          "message": "Important: ask whether this affects customer-created workflows."
+        },
+        {
+          "title": "Find a note",
+          "message": "What did I note about customer workflows?"
+        }
+      ]
+    },
+    "bot_user": {
+      "display_name": "margin",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "assistant:write",
+        "chat:write",
+        "im:history"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "app_home_opened",
+        "app_context_changed",
+        "message.im"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}
