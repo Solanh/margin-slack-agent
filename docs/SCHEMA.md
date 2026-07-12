@@ -1,0 +1,111 @@
+# Database Schema and Ownership Model
+
+## Design rules
+
+1. `notes.raw_text` is immutable after insertion.
+2. Every user-owned row includes both `workspace_id` and `user_id`.
+3. Relationships between user-owned records use composite foreign keys so data from one user cannot be attached to another user's note.
+4. OAuth and Slack installation tokens are stored only in ciphertext columns.
+5. Revisions record derived/user-edited state; they never replace the original note.
+
+## Tables
+
+### `notes`
+
+Stores the original Slack message and current derived state.
+
+- immutable raw text and Slack provenance;
+- organized text, type, priority, and status;
+- optional meeting association;
+- context confidence and transformation version;
+- unique Slack delivery identity.
+
+### `note_revisions`
+
+Append-only snapshots of user, AI, or system changes to the derived note state. The table stores inference provenance and uncertainties alongside the revision.
+
+### `meetings`
+
+Normalized Calendar, Slack huddle, or explicit meeting context. Provider-event uniqueness is scoped to the owning workspace user.
+
+### `reminders`
+
+Supports either:
+
+- a fixed `scheduled_for` timestamp; or
+- an event-relative JSON rule.
+
+A database check prevents a reminder from having both or neither scheduling form.
+
+### `oauth_connections`
+
+Stores encrypted user-level provider credentials. Repository code encrypts tokens with AES-256-GCM before executing SQL.
+
+### `workspace_installations`
+
+Reserves encrypted storage for multi-workspace Slack installation credentials. The current hackathon shell still reads one Slack token from environment variables.
+
+## Ownership enforcement
+
+Application repository methods require an `OwnerScope` containing:
+
+```ts
+{
+  workspaceId: string;
+  userId: string;
+}
+```
+
+Reads and updates include both values in their predicates. Composite foreign keys additionally prevent:
+
+- linking another user's meeting to a note;
+- creating a reminder for another user's note;
+- creating a revision for another user's note.
+
+## Original-text immutability
+
+The `notes_prevent_raw_text_update` trigger raises an exception whenever an update attempts to change `raw_text`.
+
+The duplicate-delivery upsert performs a no-op assignment to the existing Slack message timestamp. The `updated_at` trigger changes timestamps only when the row is actually distinct, so duplicate deliveries do not alter the record.
+
+## Token encryption
+
+`AesGcmTokenCipher` uses:
+
+- AES-256-GCM;
+- a random 96-bit IV per encryption;
+- an authentication tag;
+- authenticated key-version metadata;
+- a versioned ciphertext envelope.
+
+Generate a development key with:
+
+```bash
+openssl rand -base64 32
+```
+
+Store it in `TOKEN_ENCRYPTION_KEY`. Do not commit the value.
+
+Key rotation requires retaining the previous key until existing rows have been re-encrypted. The repository rejects rows encrypted under a different version rather than silently returning unusable data.
+
+## Applying migrations
+
+```bash
+npm run build
+npm run migrate
+```
+
+The migration runner applies files in lexical order and records them in `schema_migrations`.
+
+## Rollback
+
+Rollback scripts are intentionally manual and intended for development environments:
+
+```bash
+psql "$DATABASE_URL" -f migrations/rollback/002_expand_margin_schema.sql
+psql "$DATABASE_URL" -f migrations/rollback/001_create_raw_notes.sql
+```
+
+Run them in reverse migration order.
+
+The rollback for migration 002 deletes derived notes, revisions, reminders, meetings, and stored credentials. Back up any required data first. Production rollback should normally use a forward corrective migration instead of destructive scripts.
