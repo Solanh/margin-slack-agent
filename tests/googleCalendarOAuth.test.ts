@@ -40,14 +40,21 @@ function repositories() {
     create: vi.fn(async () => ({
       ...owner,
       state: "one-time-state",
-      provider: "google_calendar",
+      provider: "google_calendar" as const,
       expiresAt: new Date(Date.now() + 600_000),
     })),
     consume: vi.fn(async () => owner),
     deleteExpired: vi.fn(async () => 0),
   };
   const connections: OAuthConnectionRepository = {
-    save: vi.fn(async () => connection()),
+    save: vi.fn(async (input) =>
+      connection({
+        accessToken: input.accessToken,
+        refreshToken: input.refreshToken,
+        scopes: input.scopes,
+        expiresAt: input.expiresAt,
+      }),
+    ),
     get: vi.fn(async () => null),
     delete: vi.fn(async () => true),
   };
@@ -133,6 +140,67 @@ describe("Google Calendar OAuth", () => {
     );
   });
 
+  it("preserves an existing refresh token when Google omits a replacement", async () => {
+    const { states, connections } = repositories();
+    vi.mocked(connections.get).mockResolvedValue(connection());
+    const client = new GoogleCalendarOAuthClient(
+      {
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        redirectUri: "https://margin.example/oauth/google/calendar/callback",
+      },
+      vi.fn(async () =>
+        jsonResponse({
+          access_token: "replacement-access-token",
+          expires_in: 3600,
+          scope: GOOGLE_CALENDAR_EVENTS_READONLY_SCOPE,
+        }),
+      ),
+    );
+    const service = new GoogleCalendarConnectionService(
+      states,
+      connections,
+      client,
+    );
+
+    await service.completeAuthorization("one-time-state", "authorization-code");
+
+    expect(connections.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken: "replacement-access-token",
+        refreshToken: "refresh-token",
+      }),
+    );
+  });
+
+  it("rejects a first connection without offline credentials", async () => {
+    const { states, connections } = repositories();
+    const client = new GoogleCalendarOAuthClient(
+      {
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        redirectUri: "https://margin.example/oauth/google/calendar/callback",
+      },
+      vi.fn(async () =>
+        jsonResponse({
+          access_token: "access-token",
+          expires_in: 3600,
+          scope: GOOGLE_CALENDAR_EVENTS_READONLY_SCOPE,
+        }),
+      ),
+    );
+    const service = new GoogleCalendarConnectionService(
+      states,
+      connections,
+      client,
+    );
+
+    await expect(
+      service.completeAuthorization("one-time-state", "authorization-code"),
+    ).rejects.toThrow("offline credentials");
+    expect(connections.save).not.toHaveBeenCalled();
+  });
+
   it("rejects a token response without the required scope", async () => {
     const { states, connections } = repositories();
     const client = new GoogleCalendarOAuthClient(
@@ -186,6 +254,32 @@ describe("Google Calendar OAuth", () => {
     await expect(service.disconnect(owner)).resolves.toEqual({
       disconnected: true,
       revokedRemotely: true,
+    });
+    expect(connections.delete).toHaveBeenCalledWith(owner, "google_calendar");
+  });
+
+  it("deletes local credentials when remote revocation fails", async () => {
+    const { states, connections } = repositories();
+    vi.mocked(connections.get).mockResolvedValue(connection());
+    const client = new GoogleCalendarOAuthClient(
+      {
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        redirectUri: "https://margin.example/oauth/google/calendar/callback",
+      },
+      vi.fn(async () => {
+        throw new Error("network failure");
+      }),
+    );
+    const service = new GoogleCalendarConnectionService(
+      states,
+      connections,
+      client,
+    );
+
+    await expect(service.disconnect(owner)).resolves.toEqual({
+      disconnected: true,
+      revokedRemotely: false,
     });
     expect(connections.delete).toHaveBeenCalledWith(owner, "google_calendar");
   });
