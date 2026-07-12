@@ -53,7 +53,7 @@ function setup(events: Array<{
       meetingId: input.meetingId,
       contextSource: input.contextSource ?? "google_calendar",
       contextConfidence: input.contextConfidence,
-      contextResolutionStatus: "attached",
+      contextResolutionStatus: "attached" as const,
     })),
     appendRevision: vi.fn(),
   };
