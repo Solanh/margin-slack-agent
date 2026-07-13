@@ -113,13 +113,13 @@ export class MarginMcpStdioServer {
         },
         serverInfo: {
           name: "margin-notes",
-          title: "Margin Notes",
-          version: "0.1.0",
+          title: "Margin Notes and Reminders",
+          version: "0.2.0",
           description:
-            "Read-only access to one user's private Margin notes and meeting metadata.",
+            "Owner-scoped access to private Margin notes plus durable Slack reminder creation and cancellation.",
         },
         instructions:
-          "All tools are read-only and already scoped to one configured Slack workspace/user. Use search_notes for date, topic, meeting, type, priority, and status questions. Use list_open_notes for outstanding work. The server performs no LLM calls; summarize the returned notes with the host model.",
+          "The server is fixed to one configured Slack workspace/user and performs no LLM calls. Use search_notes, list_open_notes, and get_note for private memory retrieval. Use list_reminders before modifying reminder state. create_reminder and cancel_reminder are write actions: invoke them only when the user requests the change, require an exact timezone-aware timestamp, and allow the host to request confirmation. Margin's main Slack application must be running to deliver due reminders.",
       };
     }
 
