@@ -6,9 +6,15 @@
 - [x] Full product demo seed command added
 - [x] Reset preserves Slack installation and Google OAuth credentials
 - [x] Reset requires exact owner confirmation and an additional production opt-in
+- [x] Idempotent private Slack demo publisher added
+- [x] Every prepared Slack card is visibly labeled as seeded
+- [x] Static and live submission preflight commands added
+- [x] Slack manifest includes `im:write` for private proactive delivery
+- [x] Manifest scope/event regression tests added
 - [x] Paste-ready Devpost copy added in `docs/DEVPOST_SUBMISSION.md`
 - [x] Upload-ready architecture graphic added in `docs/architecture-overview.svg`
 - [x] Three-minute demo script aligned with seeded scenarios
+- [x] Final operational runbook added in `docs/FINAL_SUBMISSION_RUNBOOK.md`
 
 ## Product
 
@@ -25,47 +31,56 @@
 
 ## Reliability
 
-- [ ] Slack retries are idempotent
-- [ ] AI failure saves verbatim note
-- [ ] Calendar failure saves standalone note
-- [ ] No note bodies in logs
+- [ ] Latest manifest applied and app reinstalled after adding `im:write`
+- [ ] Slack retries are idempotent in the deployed sandbox
+- [ ] AI failure saves verbatim note in the deployed sandbox
+- [ ] Calendar failure saves standalone note in the deployed sandbox
+- [ ] No note bodies appear in deployed logs
 - [ ] Fresh-install test completed
 - [ ] `npm run demo:prepare` completed against the final demo owner
+- [ ] `npm run demo:publish` completed against the final demo owner
+- [ ] `npm run preflight` has zero failures
+- [ ] `npm run preflight:live` has zero failures while the final process is running
 - [ ] Full demo rehearsed twice from reset state
 
 ## Documentation
 
-- [ ] README setup is accurate
+- [ ] README setup checked against the final deployment
 - [x] Architecture diagram source included
-- [ ] Data handling and privacy documented
-- [ ] Required environment variables documented
-- [ ] Known limitations documented
-- [ ] License included
+- [x] Data handling and privacy documented
+- [x] Required environment variables documented
+- [x] Known limitations documented
+- [x] License included
 - [ ] Screenshots or GIF included
 
 ## Video
 
-- [ ] Under three minutes
+- [ ] Shorter than three minutes
+- [ ] Publicly visible on YouTube, Vimeo, Facebook Video, or Youku
 - [ ] Shows real Slack interaction
 - [ ] Explains why this is not a transcript bot
 - [ ] Shows original preservation
-- [ ] Shows automatic meeting context
+- [ ] Shows automatic meeting context or clearly disclosed fallback
 - [ ] Shows ambiguity handling
 - [ ] Shows resurfacing
 - [ ] Architecture appears briefly
 - [ ] Seeded or prepared behavior is explicitly identified
 - [ ] Audio and text are legible
+- [ ] Contains no credentials, confidential information, or unlicensed music/material
 
 ## Devpost
 
-- [ ] Correct track selected
+- [ ] New Slack Agent track selected
 - [ ] Public repository linked
-- [ ] Demonstration video linked
+- [ ] Public demonstration video linked
 - [ ] `docs/architecture-overview.svg` uploaded
 - [ ] Developer sandbox URL provided
-- [ ] Required judge accounts invited to the sandbox
+- [ ] `slackhack@salesforce.com` invited to the sandbox
+- [ ] `testing@devpost.com` invited to the sandbox
 - [ ] Required Slack technology clearly identified
 - [ ] Third-party services and licenses credited
 - [ ] Submission copy reviewed against deployed revision
-- [ ] Submission tested from a logged-out browser
-- [ ] Submitted before the official deadline
+- [ ] All bracketed placeholders removed
+- [ ] Repository and video tested from a logged-out/private browser
+- [ ] Submission status verified as submitted, not draft
+- [ ] Submitted before July 13, 2026 at 5:00 p.m. PDT / 8:00 p.m. EDT

@@ -7,7 +7,7 @@ This guide installs Margin in a Slack developer sandbox using Socket Mode. A suc
 - Node.js 20 or newer
 - PostgreSQL configured according to [DATABASE_SETUP.md](DATABASE_SETUP.md)
 - an OpenAI API key and structured-output-capable model
-- Google OAuth configuration for Calendar matching
+- optional Google OAuth configuration for live Calendar matching
 - a Slack workspace with Agent features available
 - a fully featured developer sandbox if the normal workspace plan does not include the required Agent surfaces
 
@@ -26,6 +26,7 @@ Official references:
 - https://docs.slack.dev/reference/app-manifest/
 - https://docs.slack.dev/tools/bolt-js/concepts/actions/
 - https://docs.slack.dev/reference/methods/chat.update/
+- https://docs.slack.dev/reference/methods/conversations.open/
 
 ## 1. Create or update the Slack app
 
@@ -49,10 +50,12 @@ The bot scopes are:
 
 - `assistant:write`
 - `chat:write`
+- `files:write`
 - `im:history`
+- `im:write`
 - `users:read`
 
-`users:read` supports timezone lookup, current-user huddle profile refresh, and the `user_huddle_changed` event. The manifest intentionally does not request `calls:read`.
+`im:write` is required by Slack's `conversations.open` method, which Margin uses to deliver owner-only digests, resurfacing, exports, and prepared demo cards. `files:write` is used only for private user-requested data exports. `users:read` supports timezone lookup, current-user huddle profile refresh, and the `user_huddle_changed` event. The manifest intentionally does not request `calls:read`.
 
 Reinstall the app after applying the latest event subscriptions or scopes.
 
@@ -67,7 +70,7 @@ Copy:
 cp .env.example .env
 ```
 
-Set the Slack, database, AI, encryption, and Google OAuth variables described in `.env.example`.
+Set the Slack, database, AI, and encryption variables described in `.env.example`. Google OAuth is optional; set `GOOGLE_CALENDAR_ENABLED=false` and omit the Google values when running without live Calendar matching.
 
 Then run:
 
@@ -80,7 +83,7 @@ npm run migrate
 npm start
 ```
 
-A successful connection prints that Slack, PostgreSQL, note organization, Google OAuth, and expiring Slack context signals are active.
+A successful connection prints that Slack, PostgreSQL, note organization, and expiring Slack context signals are active. When Calendar is enabled, Google OAuth and the resurfacing worker are also active.
 
 ## 5. Verify the private note card
 
@@ -95,6 +98,8 @@ A successful connection prints that Slack, PostgreSQL, note organization, Google
 
 Follow [GOOGLE_CALENDAR.md](GOOGLE_CALENDAR.md). Confirm one unambiguous event attaches, overlapping events remain choices, and disconnected or unavailable Calendar leaves a standalone note.
 
+When Calendar is disabled, confirm the App Home state says it is unavailable and that note capture, huddle context, private retrieval, and post-meeting digests still work.
+
 ## 7. Verify Slack huddle context
 
 1. Reinstall the latest manifest so `user_huddle_changed` is active.
@@ -108,7 +113,7 @@ Follow [GOOGLE_CALENDAR.md](GOOGLE_CALENDAR.md). Confirm one unambiguous event a
 
 5. Confirm no participant names, channel title, audio, or transcript appear.
 6. End the huddle and capture another note; confirm no huddle attaches.
-7. Start a scheduled Calendar event and a huddle simultaneously. Confirm the huddle becomes selected while the Calendar candidate remains available in the meeting picker.
+7. Start a scheduled Calendar event and a huddle simultaneously. Confirm the candidates produce the documented deterministic selection or clarification behavior rather than provider-order guessing.
 8. Interrupt `users.info` or omit huddle metadata and confirm note capture still completes.
 
 ## 8. Verify Agent active-view context
@@ -134,6 +139,31 @@ Follow [GOOGLE_CALENDAR.md](GOOGLE_CALENDAR.md). Confirm one unambiguous event a
 - `manifest.json` does not contain `calls:read`.
 - Logs do not contain note text, huddle payloads, tokens, authorization codes, or active-view content.
 
+## 10. Run submission preflight
+
+Set real Slack IDs for the sandbox and human demo user:
+
+```bash
+export DEMO_WORKSPACE_ID='T_REAL_WORKSPACE'
+export DEMO_USER_ID='U_REAL_USER'
+```
+
+After preparing and optionally publishing the deterministic demo data:
+
+```bash
+npm run preflight
+```
+
+While the final Margin process is running:
+
+```bash
+npm run preflight:live
+```
+
+The live preflight verifies environment configuration, PostgreSQL, migrations, seeded demo state, Slack workspace/user/DM access, Calendar connection when enabled, and `/healthz` plus `/readyz`.
+
+See [FINAL_SUBMISSION_RUNBOOK.md](FINAL_SUBMISSION_RUNBOOK.md) for the complete recording and Devpost procedure.
+
 ## Troubleshooting
 
 ### Huddle context never appears
@@ -152,6 +182,10 @@ Expected. Margin does not call `calls.info`; Slack documents that API for Calls 
 
 Confirm `message.im`, `im:history`, and a connected Socket Mode process.
 
+### Private digest or resurfacing cannot open a DM
+
+Reinstall the current manifest and confirm `im:write` is present. Also confirm the bot token belongs to the same workspace as `DEMO_WORKSPACE_ID`. Run `npm run preflight` to verify `conversations.open` can resolve the human demo user's private DM.
+
 ### Note card stays on “Organizing”
 
 Check AI configuration and logs. Raw capture remains durable even when context or organization fails.
@@ -166,4 +200,4 @@ Confirm PostgreSQL is reachable and the database user can create tables, constra
 
 ## Known limitation
 
-Actual sandbox installation, live huddle behavior, and visual verification require workspace credentials. The repository contains the manifest, implementation, migrations, automated tests, and exact verification procedure.
+Actual sandbox installation, live huddle behavior, and visual verification require workspace credentials. The repository contains the manifest, implementation, migrations, automated tests, deterministic fallback publisher, preflight command, and exact verification procedure.

@@ -40,6 +40,7 @@
         "chat:write",
         "files:write",
         "im:history",
+        "im:write",
         "users:read"
       ]
     }

@@ -65,6 +65,7 @@ Durable PostgreSQL-backed workers handle post-meeting digests, recurring-meeting
 - App Home
 - Socket Mode
 - Slack Web API for private delivery, message updates, views, and export upload
+- `im:write`-authorized private DM opening for owner-only proactive delivery
 
 ## Challenges
 
@@ -106,11 +107,21 @@ TypeScript, Node.js, Slack Bolt, Slack Agent View, Block Kit, Socket Mode, Postg
 ## Required links and access
 
 - Public repository: https://github.com/Solanh/margin-slack-agent
-- Demo video: [ADD PUBLIC VIDEO URL]
+- Public demo video under three minutes: [ADD YOUTUBE, VIMEO, FACEBOOK VIDEO, OR YOUKU URL]
 - Slack developer sandbox URL: [ADD SANDBOX URL]
-- Architecture diagram: [UPLOAD `docs/ARCHITECTURE.md` diagram export or final architecture image]
-- Judge access: invite the official Slack/Devpost judging accounts listed in the competition requirements
+- Architecture diagram: upload `docs/architecture-overview.svg` or a lossless export
+- Judge access: invite `slackhack@salesforce.com` and `testing@devpost.com` to the submitted sandbox
+- Submission deadline: July 13, 2026 at 5:00 p.m. PDT / 8:00 p.m. EDT
 
 ## Final accuracy check
 
-Before submission, confirm that the video shows the exact revision deployed in the sandbox and that every demonstrated behavior is either live or explicitly identified as seeded demo data. Do not claim that Margin has access to transcripts, channel history, or account-level Zero Data Retention.
+Before submission, confirm that:
+
+- the public video is shorter than three minutes and shows the project functioning in Slack;
+- the repository, video, and sandbox are accessible from a logged-out/private browser where applicable;
+- both required judging accounts have sandbox access;
+- the architecture diagram is uploaded;
+- all bracketed placeholders are removed;
+- the video shows the exact revision deployed in the sandbox;
+- every demonstrated behavior is either live or explicitly identified as seeded demo data; and
+- Margin is not described as having access to transcripts, unrelated Slack history, or account-level Zero Data Retention.
