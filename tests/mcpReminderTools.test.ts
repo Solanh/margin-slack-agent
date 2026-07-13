@@ -60,14 +60,13 @@ class FakeReminderStore implements MarginMcpReminderStore {
     input: CreateMcpReminderInput,
   ): Promise<McpReminder> {
     this.creates.push({ owner: createOwner, input });
-    const existing = this.reminders.find(
-      (item) => item.id === `reminder-${input.requestKey.slice(-12)}`,
-    );
+    const reminderId = "33333333-3333-4333-8333-333333333333";
+    const existing = this.reminders.find((item) => item.id === reminderId);
     if (existing) {
       return existing;
     }
     const reminder: McpReminder = {
-      id: `reminder-${input.requestKey.slice(-12)}`,
+      id: reminderId,
       noteId: input.noteId ?? "22222222-2222-4222-8222-222222222222",
       text: input.text ?? note.rawText,
       rawText: input.text ?? note.rawText,
