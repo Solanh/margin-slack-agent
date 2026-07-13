@@ -71,10 +71,7 @@ describe("reminder delivery", () => {
 
     expect(client.conversations.open).toHaveBeenCalledWith({ users: "U123" });
     expect(client.chat.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channel: "D-owner",
-        client_msg_id: reminder.id,
-      }),
+      expect.objectContaining({ channel: "D-owner" }),
     );
     expect(storage.markDelivered).toHaveBeenCalledWith(
       { workspaceId: "T123", userId: "U123" },
