@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/margin-logo.svg" alt="Margin — private meeting memory for Slack" width="640">
+</p>
+
 # Margin
 
 > **Working title:** Margin — your private margin notes for meetings in Slack.
@@ -16,7 +20,7 @@ Margin preserves that low-friction behavior rather than replacing it with a reco
 2. **Your original is permanent.** AI output is a derived view, never a replacement.
 3. **Context is attached, not invented.** Meeting metadata comes from supported Slack and Calendar signals.
 4. **Uncertainty is visible.** Close or weak candidates produce one narrow question instead of a guess.
-5. **Notes return at useful moments.** After the meeting, before the next verified related meeting, and when you privately search for them.
+5. **Notes return at useful moments.** After the meeting, before the next verified related meeting, when you privately search for them, and through explicit reminders.
 
 ## Example
 
@@ -38,6 +42,8 @@ Later, ask:
 
 Margin searches only your persisted Margin notes and returns private results with organized wording, meeting/date, status, and a control to reveal the immutable original.
 
+An existing MCP-capable LLM can query those owner-scoped notes and create or cancel durable Margin reminders without Margin embedding another model API. The main Margin application delivers due reminders privately in Slack.
+
 ## Product scope
 
 The hackathon MVP is intentionally narrow:
@@ -51,12 +57,13 @@ The hackathon MVP is intentionally narrow:
 - private post-meeting digest
 - private retrieval across the user's own notes
 - proactive pre-meeting resurfacing for verified recurring events
+- MCP access for an existing host LLM to read notes and manage fixed-time reminders
 
 Margin does **not** record audio, transcribe meetings, read unrelated channel or private-message history, or become a general project-management system.
 
 ## Repository status
 
-The current stacked implementation covers issues #1 through #11:
+The current implementation includes:
 
 - current Slack `agent_view` manifest;
 - writable Messages tab and App Home;
@@ -87,6 +94,8 @@ The current stacked implementation covers issues #1 through #11:
 - verified-series pre-meeting resurfacing with global/per-series opt-out;
 - deterministic owner-scoped private note retrieval by topic, meeting, mentioned name, type, priority, and status;
 - immutable-original retrieval through a validated private modal;
+- retry-safe fixed-time reminder delivery to private Slack DMs;
+- MCP tools for date, meeting, topic, open-work, note-detail, reminder creation, reminder listing, and cancellation;
 - production Docker packaging, health/readiness checks, redacted logging, centralized retries, and owner data controls;
 - explicit model-refusal fallback and accurate provider-retention documentation;
 - PostgreSQL-backed integration tests in CI.
@@ -118,6 +127,9 @@ npm run preflight:live
 
 Submission assets:
 
+- [Margin branding and Slack icon](docs/BRANDING.md)
+- [Slack-ready app icon](assets/margin-app-icon.png)
+- [Vector logo lockup](assets/margin-logo.svg)
 - [Final submission runbook](docs/FINAL_SUBMISSION_RUNBOOK.md)
 - [Three-minute demo script](docs/DEMO_SCRIPT.md)
 - [Devpost submission copy](docs/DEVPOST_SUBMISSION.md)
@@ -126,7 +138,7 @@ Submission assets:
 
 ## Run the application
 
-See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [Slack context signals](docs/SLACK_CONTEXT_SIGNALS.md), [context resolution](docs/CONTEXT_RESOLUTION.md), [structured transformation](docs/TRANSFORMATION.md), [interactive note cards](docs/NOTE_CARD.md), and [private note retrieval](docs/NOTE_RETRIEVAL.md).
+See [Slack developer sandbox setup](docs/SLACK_SETUP.md), [PostgreSQL setup](docs/DATABASE_SETUP.md), [Google Calendar setup](docs/GOOGLE_CALENDAR.md), [Slack context signals](docs/SLACK_CONTEXT_SIGNALS.md), [context resolution](docs/CONTEXT_RESOLUTION.md), [structured transformation](docs/TRANSFORMATION.md), [interactive note cards](docs/NOTE_CARD.md), [private note retrieval](docs/NOTE_RETRIEVAL.md), [durable reminder delivery](docs/REMINDER_DELIVERY.md), and [MCP note and reminder access](docs/MCP.md).
 
 ```bash
 cp .env.example .env
@@ -138,9 +150,16 @@ npm run migrate
 npm start
 ```
 
+Keep the main application running to deliver due reminders. Run the MCP server in a separate process:
+
+```bash
+npm run --silent mcp
+```
+
 ## Documentation
 
 - [Slack developer sandbox setup](docs/SLACK_SETUP.md)
+- [Branding and Slack app icon](docs/BRANDING.md)
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
 - [Google Calendar integration](docs/GOOGLE_CALENDAR.md)
 - [Slack huddle and Agent-context signals](docs/SLACK_CONTEXT_SIGNALS.md)
@@ -149,6 +168,8 @@ npm start
 - [Structured note transformation](docs/TRANSFORMATION.md)
 - [Interactive private note card](docs/NOTE_CARD.md)
 - [Private note retrieval](docs/NOTE_RETRIEVAL.md)
+- [Durable reminder delivery](docs/REMINDER_DELIVERY.md)
+- [MCP notes and reminder tools](docs/MCP.md)
 - [Product specification](docs/PRODUCT_SPEC.md)
 - [Market and competitive research](docs/MARKET_VALIDATION.md)
 - [User flows](docs/USER_FLOWS.md)
@@ -168,10 +189,11 @@ npm start
 - TypeScript
 - Slack Bolt for JavaScript
 - Slack Agent View and App Home
-- PostgreSQL for durable notes, context, retrieval, and notifications
+- PostgreSQL for durable notes, context, retrieval, reminders, and notifications
 - Google Calendar API for meeting matching and recurring-series identity
-- OpenAI structured outputs for conservative formatting/classification
-- database-backed workers for digests and resurfacing
+- OpenAI structured outputs for optional conservative formatting/classification
+- dependency-free MCP JSON-RPC stdio server for host-model note and reminder access
+- database-backed workers for reminders, digests, and resurfacing
 
 See [Architecture](docs/ARCHITECTURE.md) for the production and hackathon variants.
 

@@ -8,7 +8,9 @@ import {
 } from "../domain/note.js";
 import type {
   CreateReminderInput,
-  ReminderRepository,
+  DueReminder,
+  ReminderDeliveryRepository,
+  ReminderSlackMessageReference,
 } from "./reminderRepository.js";
 
 interface ReminderRow extends QueryResultRow {
@@ -25,6 +27,12 @@ interface ReminderRow extends QueryResultRow {
   updated_at: Date | string;
 }
 
+interface DueReminderRow extends ReminderRow {
+  raw_text: string;
+  organized_text: string | null;
+  attempts: number;
+}
+
 const CREATE_SQL = `
   INSERT INTO reminders (
     id,
@@ -33,9 +41,10 @@ const CREATE_SQL = `
     user_id,
     reminder_type,
     scheduled_for,
-    relative_rule
+    relative_rule,
+    next_attempt_at
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
   RETURNING *
 `;
 
@@ -50,7 +59,9 @@ const GET_SQL = `
 
 const CANCEL_SQL = `
   UPDATE reminders
-  SET status = 'cancelled'
+  SET status = 'cancelled',
+      claimed_at = NULL,
+      next_attempt_at = NULL
   WHERE id = $1
     AND workspace_id = $2
     AND user_id = $3
@@ -58,7 +69,70 @@ const CANCEL_SQL = `
   RETURNING *
 `;
 
-export class PostgresReminderRepository implements ReminderRepository {
+const CLAIM_DUE_SQL = `
+  WITH due AS (
+    SELECT id
+    FROM reminders
+    WHERE reminder_type = 'fixed'
+      AND status = 'pending'
+      AND scheduled_for <= $1
+      AND COALESCE(next_attempt_at, scheduled_for) <= $1
+      AND (
+        claimed_at IS NULL
+        OR claimed_at < $1 - INTERVAL '5 minutes'
+      )
+    ORDER BY scheduled_for ASC, id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $2
+  ), claimed AS (
+    UPDATE reminders AS reminder
+    SET claimed_at = $1,
+        attempts = reminder.attempts + 1
+    FROM due
+    WHERE reminder.id = due.id
+    RETURNING reminder.*
+  )
+  SELECT
+    claimed.*,
+    note.raw_text,
+    note.organized_text
+  FROM claimed
+  INNER JOIN notes AS note
+    ON note.id = claimed.note_id
+   AND note.workspace_id = claimed.workspace_id
+   AND note.user_id = claimed.user_id
+  ORDER BY claimed.scheduled_for ASC, claimed.id ASC
+`;
+
+const MARK_DELIVERED_SQL = `
+  UPDATE reminders
+  SET status = 'sent',
+      delivered_at = $4,
+      claimed_at = NULL,
+      next_attempt_at = NULL,
+      last_error_code = NULL,
+      slack_channel_id = $5,
+      slack_message_ts = $6
+  WHERE id = $1
+    AND workspace_id = $2
+    AND user_id = $3
+    AND status = 'pending'
+`;
+
+const MARK_FAILED_SQL = `
+  UPDATE reminders
+  SET claimed_at = NULL,
+      last_error_code = $4,
+      next_attempt_at = $5
+  WHERE id = $1
+    AND workspace_id = $2
+    AND user_id = $3
+    AND status = 'pending'
+`;
+
+export class PostgresReminderRepository
+  implements ReminderDeliveryRepository
+{
   constructor(private readonly pool: Pick<Pool, "query">) {}
 
   async create(input: CreateReminderInput): Promise<Reminder> {
@@ -77,6 +151,7 @@ export class PostgresReminderRepository implements ReminderRepository {
       input.reminderType,
       scheduledFor,
       relativeRule,
+      scheduledFor,
     ]);
 
     const row = result.rows[0];
@@ -107,6 +182,60 @@ export class PostgresReminderRepository implements ReminderRepository {
 
     const row = result.rows[0];
     return row ? this.mapRow(row) : null;
+  }
+
+  async claimDue(now: Date, limit: number): Promise<DueReminder[]> {
+    const result = await this.pool.query<DueReminderRow>(CLAIM_DUE_SQL, [
+      now,
+      limit,
+    ]);
+
+    return result.rows.map((row) => {
+      if (row.scheduled_for === null) {
+        throw new Error("Claimed fixed reminder has no scheduled time");
+      }
+      return {
+        id: row.id,
+        noteId: row.note_id,
+        workspaceId: row.workspace_id,
+        userId: row.user_id,
+        scheduledFor: this.toDate(row.scheduled_for),
+        rawText: row.raw_text,
+        organizedText: row.organized_text,
+        attempts: row.attempts,
+      };
+    });
+  }
+
+  async markDelivered(
+    owner: OwnerScope,
+    id: string,
+    reference: ReminderSlackMessageReference,
+    deliveredAt: Date,
+  ): Promise<void> {
+    await this.pool.query(MARK_DELIVERED_SQL, [
+      id,
+      owner.workspaceId,
+      owner.userId,
+      deliveredAt,
+      reference.channelId,
+      reference.messageTs,
+    ]);
+  }
+
+  async markFailed(
+    owner: OwnerScope,
+    id: string,
+    errorCode: string,
+    retryAt: Date,
+  ): Promise<void> {
+    await this.pool.query(MARK_FAILED_SQL, [
+      id,
+      owner.workspaceId,
+      owner.userId,
+      errorCode,
+      retryAt,
+    ]);
   }
 
   private mapRow(row: ReminderRow): Reminder {
