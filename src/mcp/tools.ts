@@ -7,6 +7,7 @@ import {
   type OwnerScope,
 } from "../domain/note.js";
 import type {
+  MarginMcpNoteMutationStore,
   MarginMcpNoteStore,
   McpNoteSearch,
 } from "./noteStore.js";
@@ -77,6 +78,34 @@ const GetNoteInputSchema = z
   })
   .strict();
 
+const CaptureNoteInputSchema = z
+  .object({
+    text: z.string().trim().min(1).max(2_000),
+    noteType: NoteTypeSchema.optional(),
+    priority: PrioritySchema.optional(),
+    source: z
+      .object({
+        channelId: z.string().regex(/^[CDG][A-Z0-9]+$/u),
+        messageTs: z.string().trim().min(1).max(50).optional(),
+        permalink: z.string().url().max(2_000).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+const ListNeedsReviewInputSchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).default(25),
+  })
+  .strict();
+
+const ConfirmNoteReviewInputSchema = z
+  .object({
+    noteId: z.string().uuid(),
+  })
+  .strict();
+
 const CreateReminderInputSchema = z
   .object({
     noteId: z.string().uuid().optional(),
@@ -110,6 +139,13 @@ const CancelReminderInputSchema = z
 
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const INTERNAL_WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
@@ -226,7 +262,7 @@ export const MARGIN_MCP_TOOLS: McpToolDefinition[] = [
     name: "margin.get_note",
     title: "Get a Margin note",
     description:
-      "Get one private Margin note by ID, including its immutable original, organized form, reminder information, status, uncertainty, and attached meeting metadata.",
+      "Get one private Margin note by ID, including its immutable original, organized form, provenance, review state, reminder information, status, uncertainty, and attached meeting metadata.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -236,6 +272,89 @@ export const MARGIN_MCP_TOOLS: McpToolDefinition[] = [
       required: ["noteId"],
     },
     annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: "margin.capture_note",
+    title: "Capture a private Margin note",
+    description:
+      "Preserve exact user-selected text as a private immutable Margin note. Optionally attach a Slack channel or message source, note type, and priority. Use this for deliberate 'remember this' requests; do not invent source metadata. Equivalent retries are idempotent.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        text: {
+          type: "string",
+          minLength: 1,
+          maxLength: 2_000,
+          description: "Exact text to preserve without rewriting.",
+        },
+        noteType: {
+          enum: NoteTypeSchema.options,
+          description: "Optional user-confirmed or clearly requested note type.",
+        },
+        priority: {
+          enum: PrioritySchema.options,
+          description: "Optional user-confirmed priority.",
+        },
+        source: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            channelId: {
+              type: "string",
+              pattern: "^[CDG][A-Z0-9]+$",
+              description: "Slack conversation ID from authenticated host context.",
+            },
+            messageTs: {
+              type: "string",
+              description: "Slack message timestamp when the source is a specific message.",
+            },
+            permalink: {
+              type: "string",
+              format: "uri",
+              description: "Optional Slack permalink supplied by the host.",
+            },
+          },
+          required: ["channelId"],
+        },
+      },
+      required: ["text"],
+    },
+    annotations: INTERNAL_WRITE_ANNOTATIONS,
+  },
+  {
+    name: "margin.list_needs_review",
+    title: "List Margin notes needing review",
+    description:
+      "List unconfirmed notes that remain verbatim-only, have ambiguous meeting context, or contain explicit uncertainties. Use this to create a focused private review inbox instead of silently trusting inferred memory.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 100,
+          default: 25,
+        },
+      },
+    },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: "margin.confirm_note_review",
+    title: "Confirm a Margin note",
+    description:
+      "Mark the current state of one owner-scoped Margin note as reviewed. This does not rewrite the immutable original or publish anything to Slack. Use only after the user confirms the note is acceptable.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        noteId: { type: "string", format: "uuid" },
+      },
+      required: ["noteId"],
+    },
+    annotations: INTERNAL_WRITE_ANNOTATIONS,
   },
   {
     name: "margin.list_reminders",
@@ -342,6 +461,12 @@ export class MarginMcpTools {
           return await this.listOpenNotes(argumentsValue);
         case "margin.get_note":
           return await this.getNote(argumentsValue);
+        case "margin.capture_note":
+          return await this.captureNote(argumentsValue);
+        case "margin.list_needs_review":
+          return await this.listNeedsReview(argumentsValue);
+        case "margin.confirm_note_review":
+          return await this.confirmNoteReview(argumentsValue);
         case "margin.list_reminders":
           return await this.listReminders(argumentsValue);
         case "margin.create_reminder":
@@ -405,6 +530,58 @@ export class MarginMcpTools {
   private async getNote(argumentsValue: unknown): Promise<McpToolResult> {
     const input = GetNoteInputSchema.parse(argumentsValue ?? {});
     const note = await this.store.getById(this.owner, input.noteId);
+    if (!note) {
+      return {
+        content: [{ type: "text", text: `No note found for ID ${input.noteId}` }],
+        structuredContent: { note: null },
+        isError: true,
+      };
+    }
+    return toolJson({ note });
+  }
+
+  private async captureNote(argumentsValue: unknown): Promise<McpToolResult> {
+    const input = CaptureNoteInputSchema.parse(argumentsValue ?? {});
+    const requestKey = captureRequestKey(this.owner, input);
+    const source = input.source
+      ? {
+          sourceType: input.source.messageTs
+            ? ("slack_message" as const)
+            : ("slack_channel" as const),
+          channelId: input.source.channelId,
+          ...(input.source.messageTs ? { messageTs: input.source.messageTs } : {}),
+          ...(input.source.permalink ? { permalink: input.source.permalink } : {}),
+        }
+      : undefined;
+    const note = await this.requireMutationStore().create(this.owner, {
+      text: input.text,
+      requestKey,
+      ...(input.noteType ? { noteType: input.noteType } : {}),
+      ...(input.priority ? { priority: input.priority } : {}),
+      ...(source ? { source } : {}),
+    });
+    return toolJson({
+      note,
+      capture:
+        "Margin preserved the exact text privately. Source metadata is stored only when supplied by the authenticated host context.",
+    });
+  }
+
+  private async listNeedsReview(argumentsValue: unknown): Promise<McpToolResult> {
+    const input = ListNeedsReviewInputSchema.parse(argumentsValue ?? {});
+    const notes = await this.requireMutationStore().listNeedsReview(
+      this.owner,
+      input.limit,
+    );
+    return toolJson({ count: notes.length, notes });
+  }
+
+  private async confirmNoteReview(argumentsValue: unknown): Promise<McpToolResult> {
+    const input = ConfirmNoteReviewInputSchema.parse(argumentsValue ?? {});
+    const note = await this.requireMutationStore().confirmReview(
+      this.owner,
+      input.noteId,
+    );
     if (!note) {
       return {
         content: [{ type: "text", text: `No note found for ID ${input.noteId}` }],
@@ -484,12 +661,42 @@ export class MarginMcpTools {
     return toolJson({ reminder });
   }
 
+  private requireMutationStore(): MarginMcpNoteMutationStore {
+    const store = this.store as Partial<MarginMcpNoteMutationStore>;
+    if (
+      typeof store.create !== "function" ||
+      typeof store.listNeedsReview !== "function" ||
+      typeof store.confirmReview !== "function"
+    ) {
+      throw new Error("Note mutation tools are unavailable in this MCP server configuration");
+    }
+    return store as MarginMcpNoteMutationStore;
+  }
+
   private requireReminderStore(): MarginMcpReminderStore {
     if (!this.reminders) {
       throw new Error("Reminder tools are unavailable in this MCP server configuration");
     }
     return this.reminders;
   }
+}
+
+function captureRequestKey(
+  owner: OwnerScope,
+  input: z.infer<typeof CaptureNoteInputSchema>,
+): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        workspaceId: owner.workspaceId,
+        userId: owner.userId,
+        text: input.text,
+        noteType: input.noteType ?? null,
+        priority: input.priority ?? null,
+        source: input.source ?? null,
+      }),
+    )
+    .digest("hex");
 }
 
 function reminderRequestKey(
