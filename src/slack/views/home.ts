@@ -207,7 +207,7 @@ export function buildMarginHomeView(
 
   return {
     type: "home",
-    blocks: blocks as SlackHomeView["blocks"],
+    blocks: blocks as unknown as SlackHomeView["blocks"],
   };
 }
 
