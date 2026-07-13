@@ -28,7 +28,7 @@ export function assertDemoResetAllowed(
     );
   }
 
-  const nodeEnvironment = environment.NODE_ENV ?? "development";
+  const nodeEnvironment = environment.NODE_ENV ?? "unknown";
   const safeEnvironment =
     nodeEnvironment === "development" || nodeEnvironment === "test";
   if (
