@@ -1,17 +1,20 @@
-# Margin read-only MCP server
+# Margin MCP server
 
-Margin includes a small Model Context Protocol server that exposes one user's private notes to an existing MCP-capable LLM. The MCP process does not call OpenAI, Anthropic, Slack AI, or any other model API. The host application supplies the model and uses Margin only as a read-only data source.
+Margin includes a small Model Context Protocol server that exposes one user's private notes and reminder state to an existing MCP-capable LLM. The MCP process does not call OpenAI, Anthropic, Slack AI, or another model API. The host application supplies the model.
 
 This makes prompts such as these possible:
 
 - "What notes did I take today?"
 - "What were my notes from the planning meeting?"
 - "What do I still need to do?"
-- "Show the original text for this note."
+- "Remind me tomorrow at 9:00 AM Eastern to check ngrok."
+- "Cancel my pending ngrok reminder."
 
 ## Why tools instead of another embedded LLM
 
-MCP tools are discovered and invoked by the model already running in the host application. Margin performs deterministic, owner-scoped PostgreSQL queries and returns structured note data. The host model is responsible for summarization, action extraction, and follow-up reasoning.
+MCP tools are discovered and invoked by the model already running in the host application. Margin performs deterministic, owner-scoped PostgreSQL operations and returns structured data. The host model handles natural-language interpretation, summarization, and reasoning.
+
+Reminder creation is intentionally split from delivery. The MCP process persists a reminder; the main Margin application later delivers it through the installed Slack bot. The MCP client does not need Slack credentials and does not need to remain connected until the reminder fires.
 
 The implementation follows the MCP JSON-RPC lifecycle and tool messages for protocol revisions `2025-11-25`, `2025-06-18`, and `2025-03-26` over stdio.
 
@@ -22,31 +25,50 @@ Official references:
 - https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 - https://docs.slack.dev/ai/slackbot-mcp-client/
 
-## Tools
+## Note tools
 
 ### `margin.search_notes`
 
-Searches private notes by any combination of:
-
-- local calendar date and timezone;
-- ISO timestamp range;
-- meeting-title substring;
-- raw or organized note text;
-- note type;
-- priority;
-- status.
-
-Results include the immutable original text, organized text when available, classification, priority, status, reminders, uncertainty, context state, and attached meeting metadata.
+Searches private notes by date, meeting-title substring, raw or organized text, note type, priority, and status.
 
 ### `margin.list_open_notes`
 
-Returns all open notes, including verbatim fallback notes that were never AI-classified. This is intentionally broader than an `action`-only query so the host LLM can identify obligations from notes captured while the embedded transformation provider was unavailable.
+Returns all open notes, including verbatim fallback notes that were never AI-classified. The host LLM can identify obligations from those notes.
 
 ### `margin.get_note`
 
 Returns one note by UUID with its immutable original and complete metadata.
 
-All three tools declare read-only, non-destructive, idempotent, closed-world annotations.
+These tools are read-only, non-destructive, idempotent, and closed-world.
+
+## Reminder tools
+
+### `margin.list_reminders`
+
+Lists fixed-time reminders and their current delivery status. Models should use this before selecting a reminder to cancel.
+
+### `margin.create_reminder`
+
+Creates a fixed-time reminder from either:
+
+- an existing owner-scoped Margin note ID; or
+- new exact reminder text, which is preserved as a new immutable Margin note.
+
+The input must contain an exact ISO 8601 timestamp with an explicit timezone or UTC offset, such as:
+
+```text
+2026-07-14T09:00:00-04:00
+```
+
+The tool rejects timezone-free timestamps and times more than five minutes in the past. A model should ask a clarification question rather than guessing when the date, time, or timezone is ambiguous.
+
+Equivalent repeated calls are idempotent: owner, note/text, and normalized scheduled time produce the same persisted reminder.
+
+This tool is annotated as a non-destructive write action with an external future effect. MCP hosts may ask the user to confirm it.
+
+### `margin.cancel_reminder`
+
+Cancels one pending or snoozed reminder by UUID. Sent reminders cannot be cancelled. This tool is annotated as a destructive, idempotent write action because it removes a future notification.
 
 ## Owner isolation
 
@@ -61,7 +83,7 @@ MARGIN_MCP_TIME_ZONE=America/New_York
 
 For the deterministic sandbox, `MARGIN_MCP_WORKSPACE_ID` and `MARGIN_MCP_USER_ID` may be omitted; the process falls back to `DEMO_WORKSPACE_ID` and `DEMO_USER_ID`.
 
-Every SQL query includes both owner fields. Tool callers cannot supply or override a workspace or user ID.
+Every SQL operation includes both owner fields. Tool callers cannot supply or override a workspace or user ID.
 
 The MCP process loads only:
 
@@ -71,10 +93,26 @@ The MCP process loads only:
 
 It does not require `AI_API_KEY`, `AI_MODEL`, Slack tokens, Google credentials, or the token-encryption key.
 
+The separately running main Margin application requires its normal Slack credentials to deliver due reminders.
+
 ## Build and run
 
+Apply migrations and build:
+
 ```bash
+npm run migrate
 npm run build
+```
+
+Run the main Slack application so due reminders can be delivered:
+
+```bash
+npm start
+```
+
+In a separate process, run the MCP server:
+
+```bash
 npm run --silent mcp
 ```
 
@@ -90,8 +128,6 @@ The working directory should be the repository directory so `dotenv` can load `.
 
 ## Example local client configuration
 
-A generic stdio MCP configuration looks like:
-
 ```json
 {
   "mcpServers": {
@@ -106,18 +142,21 @@ A generic stdio MCP configuration looks like:
 }
 ```
 
-The exact configuration file location depends on the host. Claude Desktop, Claude Code, Codex, compatible IDEs, and other stdio MCP clients use equivalent command/argument settings.
+Claude Desktop, Claude Code, Codex, compatible IDEs, and other stdio MCP clients use equivalent command/argument settings.
 
 ## ChatGPT and Slackbot
 
-This first version is local stdio only. ChatGPT custom apps connect to remote MCP servers, and Slackbot's MCP client expects an HTTPS MCP URL plus an authentication mode. Connecting either product requires a separate Streamable HTTP deployment and authentication layer; it should not expose the fixed-owner database endpoint publicly without those controls.
+This version is local stdio only. ChatGPT custom apps and Slackbot expect a remote HTTPS MCP endpoint with an authentication model. A remote version must derive the owner from the authenticated caller rather than exposing the fixed-owner local server.
 
-Slackbot can discover and invoke an app's remote MCP tools, which is a strong future path for Margin: Slackbot would provide the existing LLM while Margin supplies private note retrieval. The remote version should use Slack identity or OAuth and derive the owner from the authenticated caller instead of fixed environment variables.
+Slackbot and other MCP hosts can use the existing LLM while Margin supplies private note and reminder tools. Write-tool confirmation and authorization should remain enabled.
 
 ## Security boundaries
 
-- Read-only SQL only; there are no update, delete, or export tools.
+- Note retrieval is read-only.
+- Reminder writes are limited to create and cancel; there is no arbitrary SQL, Slack-send, delete-note, or data-export tool.
 - Owner identity is server configuration, not model input.
-- Results include private note text, so only connect the server to an LLM host you trust.
+- New reminder text is preserved as an immutable Margin note.
+- Exact timezone-aware timestamps are required.
+- Results contain private note text, so connect the server only to an LLM host you trust.
 - Do not expose the stdio process through an unauthenticated network wrapper.
-- Prepared demo notes remain labeled in Slack, but MCP returns the database records themselves; the host should distinguish demo data when presenting it.
+- Margin reminder delivery is at-least-once; see `docs/REMINDER_DELIVERY.md` for retry semantics.
