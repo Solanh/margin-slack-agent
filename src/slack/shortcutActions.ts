@@ -172,7 +172,10 @@ async function captureShortcutNote(
         text: response.text,
         blocks: response.blocks as never,
       });
-      return { channel: posted.channel, ts: posted.ts };
+      return {
+        ...(typeof posted.channel === "string" ? { channel: posted.channel } : {}),
+        ...(typeof posted.ts === "string" ? { ts: posted.ts } : {}),
+      };
     },
     update: (response) =>
       client.chat.update({
