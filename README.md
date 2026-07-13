@@ -93,24 +93,32 @@ The current stacked implementation covers issues #1 through #11:
 
 ## Demo and submission
 
-The repository includes a safe deterministic demo workflow:
+The repository includes a safe deterministic fallback workflow and an end-to-end submission preflight:
 
 ```bash
-export DATABASE_URL='postgresql://...'
 export DEMO_WORKSPACE_ID='T_REAL_WORKSPACE'
 export DEMO_USER_ID='U_REAL_DEMO_USER'
-export DEMO_SOURCE_CHANNEL_ID='D_REAL_MARGIN_DM'
 export DEMO_CONFIRM_RESET="${DEMO_WORKSPACE_ID}:${DEMO_USER_ID}"
 
 npm run migrate
 npm run demo:prepare
-npm start
+npm run demo:publish
+npm run preflight
 ```
 
-`demo:reset` removes only Margin data owned by the explicitly named workspace/user and preserves the Slack installation and Google OAuth connection. Outside development/test, it also requires `DEMO_ALLOW_NON_DEVELOPMENT_RESET=true`.
+`demo:reset` removes only Margin data owned by the explicitly named workspace/user and preserves the Slack installation and Google OAuth connection. Outside explicit development/test environments, it also requires `DEMO_ALLOW_NON_DEVELOPMENT_RESET=true`.
+
+`demo:publish` opens the real owner DM, publishes or updates the prepared note cards, delivers the seeded digest and resurfacing examples, and visibly labels every prepared message as **Seeded demo state**. It never presents prepared data as live capture.
+
+With Margin running, require the final process to be ready:
+
+```bash
+npm run preflight:live
+```
 
 Submission assets:
 
+- [Final submission runbook](docs/FINAL_SUBMISSION_RUNBOOK.md)
 - [Three-minute demo script](docs/DEMO_SCRIPT.md)
 - [Devpost submission copy](docs/DEVPOST_SUBMISSION.md)
 - [Upload-ready architecture graphic](docs/architecture-overview.svg)
@@ -148,6 +156,7 @@ npm start
 - [Trust and privacy model](docs/TRUST_AND_PRIVACY.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Issue backlog](docs/ISSUE_BACKLOG.md)
+- [Final submission runbook](docs/FINAL_SUBMISSION_RUNBOOK.md)
 - [Hackathon demo script](docs/DEMO_SCRIPT.md)
 - [Devpost submission copy](docs/DEVPOST_SUBMISSION.md)
 - [Submission checklist](docs/SUBMISSION_CHECKLIST.md)
