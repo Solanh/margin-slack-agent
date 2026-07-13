@@ -12,9 +12,9 @@ This design means the model or MCP client does not need Slack credentials and do
 
 ## Delivery guarantees
 
-The worker uses PostgreSQL `FOR UPDATE SKIP LOCKED` claiming plus a five-minute stale-claim lease. Multiple Margin processes can sweep concurrently without normally claiming the same reminder. Slack posts include a stable `client_msg_id` derived from the reminder UUID to reduce duplicate posts if a process loses its database connection after Slack accepts the message.
+The worker uses PostgreSQL `FOR UPDATE SKIP LOCKED` claiming plus a five-minute stale-claim lease. Multiple Margin processes can sweep concurrently without normally claiming the same reminder.
 
-Reminder delivery is at-least-once. A failure after Slack accepts the message but before PostgreSQL records success can still produce a duplicate in edge cases; the stable Slack client message ID is the available deduplication signal.
+Reminder delivery is at-least-once. A failure after Slack accepts the message but before PostgreSQL records success can produce a duplicate in an edge case. The stored Slack message reference provides an audit trail after successful persistence, but Slack's current Node message API does not expose a supported idempotency key for this call.
 
 ## Runtime
 
