@@ -26,6 +26,7 @@ Official references:
 - https://docs.slack.dev/reference/app-manifest/
 - https://docs.slack.dev/tools/bolt-js/concepts/actions/
 - https://docs.slack.dev/reference/methods/chat.update/
+- https://docs.slack.dev/reference/methods/conversations.open/
 
 ## 1. Create or update the Slack app
 
@@ -51,9 +52,10 @@ The bot scopes are:
 - `chat:write`
 - `files:write`
 - `im:history`
+- `im:write`
 - `users:read`
 
-`files:write` is used only for private user-requested data exports. `users:read` supports timezone lookup, current-user huddle profile refresh, and the `user_huddle_changed` event. The manifest intentionally does not request `calls:read`.
+`im:write` is required by Slack's `conversations.open` method, which Margin uses to deliver owner-only digests, resurfacing, exports, and prepared demo cards. `files:write` is used only for private user-requested data exports. `users:read` supports timezone lookup, current-user huddle profile refresh, and the `user_huddle_changed` event. The manifest intentionally does not request `calls:read`.
 
 Reinstall the app after applying the latest event subscriptions or scopes.
 
@@ -182,7 +184,7 @@ Confirm `message.im`, `im:history`, and a connected Socket Mode process.
 
 ### Private digest or resurfacing cannot open a DM
 
-Reinstall the current manifest and confirm the bot token belongs to the same workspace as `DEMO_WORKSPACE_ID`. Run `npm run preflight` to verify `conversations.open` can resolve the human demo user's private DM.
+Reinstall the current manifest and confirm `im:write` is present. Also confirm the bot token belongs to the same workspace as `DEMO_WORKSPACE_ID`. Run `npm run preflight` to verify `conversations.open` can resolve the human demo user's private DM.
 
 ### Note card stays on “Organizing”
 
