@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { loadDatabaseEnvironment } from "../config.js";
 import type { OwnerScope } from "../domain/note.js";
 import { PostgresMarginMcpNoteStore } from "./noteStore.js";
+import { PostgresMarginMcpReminderStore } from "./reminderStore.js";
 import { MarginMcpStdioServer } from "./stdioServer.js";
 import { MarginMcpTools } from "./tools.js";
 
@@ -49,8 +50,14 @@ async function main(): Promise<void> {
 
   try {
     await pool.query("SELECT 1");
-    const store = new PostgresMarginMcpNoteStore(pool);
-    const tools = new MarginMcpTools(store, mcp.owner, mcp.timeZone);
+    const notes = new PostgresMarginMcpNoteStore(pool);
+    const reminders = new PostgresMarginMcpReminderStore(pool);
+    const tools = new MarginMcpTools(
+      notes,
+      mcp.owner,
+      mcp.timeZone,
+      reminders,
+    );
     const server = new MarginMcpStdioServer(tools);
     await server.run();
   } finally {
