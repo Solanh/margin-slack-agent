@@ -1,5 +1,6 @@
 import { App, LogLevel } from "@slack/bolt";
 import type { Environment } from "../config.js";
+import { SafeStructuredLogger } from "../observability/safeLogger.js";
 import type { PostMeetingDigestRepository } from "../storage/postMeetingDigestRepository.js";
 import type { PreMeetingResurfacingRepository } from "../storage/preMeetingResurfacingRepository.js";
 import { registerCalendarActions } from "./calendarActions.js";
@@ -36,12 +37,28 @@ export function createSlackApp(
   environment: Environment,
   dependencies: SlackApplicationDependencies,
 ): App {
+  const safeLogger = new SafeStructuredLogger(
+    toSlackLogLevel(environment.LOG_LEVEL),
+  );
+  safeLogger.setName("margin_slack");
+
   const app = new App({
     token: environment.SLACK_BOT_TOKEN,
     signingSecret: environment.SLACK_SIGNING_SECRET,
     socketMode: true,
     appToken: environment.SLACK_APP_TOKEN,
-    logLevel: toSlackLogLevel(environment.LOG_LEVEL),
+    logger: safeLogger as never,
+  });
+
+  app.error(async (error) => {
+    safeLogger.logEvent(
+      "error",
+      {
+        component: "slack",
+        eventType: "unhandled_bolt_error",
+      },
+      error,
+    );
   });
 
   registerSlackListeners(app, dependencies);

@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { describeError } from "../observability/safeLogger.js";
 
 export function createPostgresPool(databaseUrl: string): Pool {
   const pool = new Pool({
@@ -9,8 +10,7 @@ export function createPostgresPool(databaseUrl: string): Pool {
   });
 
   pool.on("error", (error) => {
-    // Never include query parameters or note contents in this log path.
-    console.error("Unexpected PostgreSQL pool error", error);
+    console.error("Unexpected PostgreSQL pool error", describeError(error));
   });
 
   return pool;
