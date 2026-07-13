@@ -1,3 +1,4 @@
+import type { WebClient } from "@slack/web-api";
 import { loadGoogleEnvironment } from "../../config.js";
 import type {
   DashboardUpcomingItem,
@@ -5,6 +6,8 @@ import type {
   RetrievedNote,
 } from "../../domain/retrieval.js";
 import type { UserDataSettings } from "../../storage/userDataRepository.js";
+
+type SlackHomeView = Parameters<WebClient["views"]["publish"]>[0]["view"];
 
 export interface MarginHomeViewState {
   calendarAvailable?: boolean;
@@ -20,7 +23,9 @@ const DEFAULT_DATA_SETTINGS: UserDataSettings = {
   retentionDays: null,
 };
 
-export function buildMarginHomeView(state: MarginHomeViewState) {
+export function buildMarginHomeView(
+  state: MarginHomeViewState,
+): SlackHomeView {
   const calendarAvailable =
     state.calendarAvailable ?? loadGoogleEnvironment().enabled;
   const dataSettings = state.dataSettings ?? DEFAULT_DATA_SETTINGS;
@@ -201,8 +206,8 @@ export function buildMarginHomeView(state: MarginHomeViewState) {
   );
 
   return {
-    type: "home" as const,
-    blocks: blocks as never,
+    type: "home",
+    blocks: blocks as SlackHomeView["blocks"],
   };
 }
 
