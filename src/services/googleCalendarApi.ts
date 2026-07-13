@@ -3,6 +3,7 @@ import type { OwnerScope } from "../domain/note.js";
 import type { OAuthConnectionRepository } from "../storage/oauthConnectionRepository.js";
 import {
   GOOGLE_CALENDAR_EVENTS_READONLY_SCOPE,
+  GoogleCalendarNotConfiguredError,
   GoogleCalendarOAuthClient,
   type FetchLike,
 } from "./googleCalendarOAuth.js";
@@ -68,16 +69,25 @@ export class GoogleCalendarApiError extends Error {
 
 export class GoogleCalendarApiService {
   constructor(
-    private readonly connections: OAuthConnectionRepository,
-    private readonly oauthClient: GoogleCalendarOAuthClient,
+    private readonly connections: OAuthConnectionRepository | null,
+    private readonly oauthClient: GoogleCalendarOAuthClient | null,
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
+
+  static disabled(): GoogleCalendarApiService {
+    return new GoogleCalendarApiService(null, null);
+  }
+
+  isAvailable(): boolean {
+    return Boolean(this.connections && this.oauthClient);
+  }
 
   async listOverlappingEvents(
     owner: OwnerScope,
     capturedAt: Date,
     toleranceMs = DEFAULT_TOLERANCE_MS,
   ): Promise<GoogleCalendarEventCandidate[]> {
+    this.requireConfigured();
     if (!Number.isFinite(toleranceMs) || toleranceMs < 0) {
       throw new Error("Calendar overlap tolerance must be non-negative");
     }
@@ -92,6 +102,7 @@ export class GoogleCalendarApiService {
     from: Date,
     horizonMs = DEFAULT_UPCOMING_HORIZON_MS,
   ): Promise<GoogleCalendarEventCandidate[]> {
+    this.requireConfigured();
     if (!Number.isFinite(horizonMs) || horizonMs <= 0) {
       throw new Error("Calendar upcoming horizon must be positive");
     }
@@ -139,7 +150,8 @@ export class GoogleCalendarApiService {
   }
 
   private async getAccessToken(owner: OwnerScope): Promise<string> {
-    const connection = await this.connections.get(owner, "google_calendar");
+    const { connections, oauthClient } = this.requireConfigured();
+    const connection = await connections.get(owner, "google_calendar");
     if (!connection) {
       throw new GoogleCalendarNotConnectedError();
     }
@@ -163,10 +175,10 @@ export class GoogleCalendarApiService {
       );
     }
 
-    const refreshed = await this.oauthClient.refreshAccessToken(
+    const refreshed = await oauthClient.refreshAccessToken(
       connection.refreshToken,
     );
-    await this.connections.save({
+    await connections.save({
       ...owner,
       provider: "google_calendar",
       accessToken: refreshed.accessToken,
@@ -176,6 +188,19 @@ export class GoogleCalendarApiService {
     });
 
     return refreshed.accessToken;
+  }
+
+  private requireConfigured(): {
+    connections: OAuthConnectionRepository;
+    oauthClient: GoogleCalendarOAuthClient;
+  } {
+    if (!this.connections || !this.oauthClient) {
+      throw new GoogleCalendarNotConfiguredError();
+    }
+    return {
+      connections: this.connections,
+      oauthClient: this.oauthClient,
+    };
   }
 
   private normalizeEvent(
