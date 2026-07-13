@@ -10,6 +10,7 @@ export interface DemoSeedSnapshot {
   noteCount: number;
   meetingCount: number;
   ambiguousCandidateCount: number;
+  publishedNoteCardCount: number;
   digestStatus: string | null;
   digestChannelId: string | null;
   resurfacingStatus: string | null;
@@ -47,6 +48,20 @@ export function evaluateDemoSeed(
     ),
   ];
 
+  checks.push(
+    snapshot.publishedNoteCardCount >= 2
+      ? {
+          name: "Seeded note cards",
+          status: "pass",
+          detail: `${snapshot.publishedNoteCardCount} labeled fallback cards are published privately.`,
+        }
+      : {
+          name: "Seeded note cards",
+          status: "warn",
+          detail:
+            "Labeled fallback cards are not both published. Use live capture or run npm run demo:publish.",
+        },
+  );
   checks.push(
     deliveryCheck(
       "Post-meeting digest",
