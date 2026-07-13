@@ -1,81 +1,122 @@
 # Three-Minute Demo Script
 
-## 0:00–0:20 — Problem
+## Deterministic preparation
+
+Use an isolated Slack sandbox user. The reset command deletes only owner-scoped Margin notes, meetings, Slack context caches, series preferences, and notification preferences. It preserves the Slack installation and Google OAuth connection.
+
+```bash
+export DATABASE_URL='postgresql://...'
+export DEMO_WORKSPACE_ID='T_REAL_WORKSPACE'
+export DEMO_USER_ID='U_REAL_DEMO_USER'
+export DEMO_SOURCE_CHANNEL_ID='D_REAL_MARGIN_DM'
+export DEMO_CONFIRM_RESET="${DEMO_WORKSPACE_ID}:${DEMO_USER_ID}"
+
+npm run migrate
+npm run demo:prepare
+npm start
+```
+
+Outside `development` or `test`, the reset additionally requires:
+
+```bash
+export DEMO_ALLOW_NON_DEVELOPMENT_RESET=true
+```
+
+The seed fails clearly when the selected owner already has notes or meetings. Run the reset before reseeding. Seeded dates are relative to execution time, so the private digest and recurring-meeting resurfacing jobs are immediately due.
+
+Before recording:
+
+1. Confirm the app is connected in the official Slack developer sandbox.
+2. Confirm the demo user can DM Margin and open App Home.
+3. Confirm the seeded private digest and resurfacing notification were delivered.
+4. Open the retrieval examples printed by `npm run demo:seed`.
+5. Prepare one real overlapping Calendar/huddle case for the clarification buttons. The database seed creates the ambiguous candidate state, but the video should show a real Slack card or clearly label any prepared representation.
+6. Reset and reseed once more immediately before the final take.
+
+## 0:00–0:18 — Problem
 
 Show a Slack self-DM containing several rough notes.
 
 Narration:
 
-> During meetings, I already send quick notes to myself in Slack because opening another app breaks my attention. But those notes get buried, have no meeting context, and rarely come back when I need them.
+> During meetings, I already send quick notes to myself in Slack because opening another app breaks my attention. But those notes get buried, have no reliable meeting context, and rarely come back when I need them.
 
-## 0:20–0:40 — Positioning
+## 0:18–0:36 — Positioning
 
 Open Margin's Agent View.
 
 > Margin is not a meeting recorder. It captures only the points I decide matter, keeps them private, and permanently preserves my original words.
 
-## 0:40–1:15 — Live capture
+## 0:36–1:08 — Live capture
 
-Show a calendar meeting or huddle in progress. DM:
+Show `Workflow Migration Review` in progress. DM:
 
-> important ask if migration also affects customer-created workflows. remind me before planning
+> important ask if migration also affects customer-created workflows
 
-Margin returns:
+Show the same private processing message update into the final card:
 
 - organized open question;
 - high priority;
-- current meeting;
-- reminder relative to next planning meeting;
-- original-preserved label.
+- verified current meeting;
+- original-preserved label;
+- visible provenance and uncertainty.
 
-Open the original briefly.
+Open the immutable original briefly.
 
 Key line:
 
 > The organized version is useful, but Margin never replaces the original or pretends an inference is a fact.
 
-## 1:15–1:40 — Ambiguity and trust
+## 1:08–1:32 — Ambiguity and trust
 
-Capture another note while two meetings overlap, or use a prepared case.
+Capture:
 
-Margin asks which meeting applies with two buttons plus “No meeting.”
+> check whether legal approved the rollout
 
-> Instead of silently attaching the wrong context, Margin asks one small question.
+Do this while `Launch Readiness` and a Slack huddle overlap, or use an explicitly labeled prepared case. Show the two meeting choices plus `No meeting`.
 
-## 1:40–2:05 — Digest
+> Instead of silently attaching the wrong context, Margin asks one small question. One tap updates the existing private card.
 
-Show the private post-meeting digest grouped into decisions, actions, and questions.
+## 1:32–1:55 — Post-meeting digest
 
-> This is not a transcript summary. Every item here is something I personally captured.
+Show the seeded private `Launch Review` digest grouped into decision, action, and question sections.
 
-## 2:05–2:30 — Resurfacing
+> This is not a transcript summary. Every item here is something I personally captured, and the exact originals remain available.
 
-Advance to the next planning meeting or use a prepared upcoming event.
+## 1:55–2:20 — Pre-meeting resurfacing
 
-Show Margin surfacing the unresolved migration question before the meeting.
+Show the seeded notification for the upcoming `Planning` meeting. Highlight the unresolved rollout ownership action and customer-workflows question from the prior verified instance.
 
-> The differentiator is the full memory lifecycle: capture, preserve, contextualize, and return at the useful moment.
+> Margin only connects these meetings because Google provides the same recurring-series identity. It does not guess from similar titles.
 
-## 2:30–2:45 — Retrieval
+Briefly show `Mark resolved`, `Snooze`, and opt-out controls.
+
+## 2:20–2:40 — Private retrieval
 
 Ask:
 
 > What did I note about customer workflows?
 
-Show the result with meeting/date and access to original.
+Show the result with organized wording, meeting/date, status, and the private control to reveal the original.
 
-## 2:45–3:00 — Architecture and close
+Optional second query if timing permits:
+
+> Show unresolved high priority actions
+
+## 2:40–3:00 — Architecture and close
 
 Show one architecture slide.
 
-> Margin uses Slack Agent View, huddle/context signals, Google Calendar, durable raw-note storage, and structured AI output. It helps people remember selectively without recording everyone else.
+> Margin uses Slack Agent View, supported huddle context, optional Google Calendar, durable PostgreSQL storage, and strict structured AI output. The original is saved before any external call, and failures fall back to that preserved note.
 
-Final screen: tagline and public repository.
+Final screen: tagline, public repository, and privacy boundary.
 
-## Demo rules
+## Recording rules
 
-- Do not spend time on login/setup.
+- Keep the final video at or below the competition limit.
+- Do not spend time on login, installation, or environment setup.
 - Use large text and a clean Slack workspace.
-- Keep one narrative thread throughout.
-- Demonstrate failure-aware behavior, not only happy-path AI.
-- Never imply that seeded or simulated data is live.
+- Keep the customer-workflows narrative through capture, resurfacing, and retrieval.
+- Show one trust behavior, not only happy-path AI.
+- Never imply seeded or simulated data is live.
+- Never imply Margin records meetings, searches unrelated Slack history, or guarantees account-level Zero Data Retention.

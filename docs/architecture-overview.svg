@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Margin Slack agent architecture</title>
+  <desc id="desc">A left-to-right architecture diagram showing private Slack capture, raw-note-first persistence, evidence-based context resolution, conservative structured AI transformation, PostgreSQL storage, and private digest, resurfacing, and retrieval delivery.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0 0 L12 6 L0 12 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title { font: 700 42px Inter, ui-sans-serif, system-ui, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 20px Inter, ui-sans-serif, system-ui, sans-serif; fill: #475569; }
+      .stage { font: 700 15px Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 1.4px; fill: #64748b; }
+      .box-title { font: 700 24px Inter, ui-sans-serif, system-ui, sans-serif; fill: #0f172a; }
+      .box-body { font: 400 17px Inter, ui-sans-serif, system-ui, sans-serif; fill: #475569; }
+      .small { font: 600 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #334155; }
+      .pill { font: 700 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #ffffff; }
+      .arrow { fill: none; stroke: #64748b; stroke-width: 4; marker-end: url(#arrow); }
+      .arrow-dashed { fill: none; stroke: #94a3b8; stroke-width: 3; stroke-dasharray: 10 10; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <text x="80" y="78" class="title">Margin — private meeting memory in Slack</text>
+  <text x="80" y="116" class="subtitle">The user chooses what matters. The exact original is saved before Calendar or AI is called.</text>
+
+  <text x="80" y="178" class="stage">1 · PRIVATE CAPTURE</text>
+  <g filter="url(#shadow)">
+    <rect x="80" y="205" width="300" height="205" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  </g>
+  <rect x="108" y="232" width="110" height="30" rx="15" fill="#4f46e5"/>
+  <text x="163" y="252" text-anchor="middle" class="pill">SLACK</text>
+  <text x="108" y="300" class="box-title">Agent View / DM</text>
+  <text x="108" y="336" class="box-body">A user sends one deliberate</text>
+  <text x="108" y="362" class="box-body">micronote during a meeting.</text>
+  <text x="108" y="392" class="small">No audio · no transcript · no channel history</text>
+
+  <text x="450" y="178" class="stage">2 · RAW NOTE FIRST</text>
+  <g filter="url(#shadow)">
+    <rect x="450" y="205" width="300" height="205" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  </g>
+  <rect x="478" y="232" width="132" height="30" rx="15" fill="#059669"/>
+  <text x="544" y="252" text-anchor="middle" class="pill">DURABLE</text>
+  <text x="478" y="300" class="box-title">Immutable original</text>
+  <text x="478" y="336" class="box-body">PostgreSQL persists exact text</text>
+  <text x="478" y="362" class="box-body">with a Slack idempotency key.</text>
+  <text x="478" y="392" class="small">Failures always fall back to verbatim</text>
+
+  <text x="820" y="178" class="stage">3 · EVIDENCE + ORGANIZATION</text>
+  <g filter="url(#shadow)">
+    <rect x="820" y="205" width="410" height="205" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  </g>
+  <rect x="848" y="232" width="156" height="30" rx="15" fill="#7c3aed"/>
+  <text x="926" y="252" text-anchor="middle" class="pill">CONSERVATIVE</text>
+  <text x="848" y="300" class="box-title">Context resolver + structured AI</text>
+  <text x="848" y="336" class="box-body">Calendar, huddle, explicit, and standalone</text>
+  <text x="848" y="362" class="box-body">candidates are scored together.</text>
+  <text x="848" y="392" class="small">Clear evidence attaches · close evidence asks</text>
+
+  <text x="1300" y="178" class="stage">4 · PRIVATE RETURN</text>
+  <g filter="url(#shadow)">
+    <rect x="1300" y="205" width="220" height="205" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  </g>
+  <rect x="1328" y="232" width="106" height="30" rx="15" fill="#0f766e"/>
+  <text x="1381" y="252" text-anchor="middle" class="pill">OWNER ONLY</text>
+  <text x="1328" y="300" class="box-title">Slack delivery</text>
+  <text x="1328" y="336" class="box-body">Interactive card</text>
+  <text x="1328" y="362" class="box-body">Digest · Resurfacing</text>
+  <text x="1328" y="388" class="box-body">Private retrieval</text>
+
+  <path d="M380 307 H438" class="arrow"/>
+  <path d="M750 307 H808" class="arrow"/>
+  <path d="M1230 307 H1288" class="arrow"/>
+
+  <g filter="url(#shadow)">
+    <rect x="240" y="515" width="1120" height="245" rx="28" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  </g>
+  <text x="280" y="565" class="box-title">Trust and reliability layer</text>
+
+  <rect x="280" y="605" width="230" height="108" rx="18" fill="#f1f5f9"/>
+  <text x="305" y="641" class="small">Owner-scoped storage</text>
+  <text x="305" y="672" class="box-body">Workspace + user predicates</text>
+  <text x="305" y="698" class="box-body">and database constraints</text>
+
+  <rect x="540" y="605" width="230" height="108" rx="18" fill="#f1f5f9"/>
+  <text x="565" y="641" class="small">Visible uncertainty</text>
+  <text x="565" y="672" class="box-body">Verified, inferred, edited,</text>
+  <text x="565" y="698" class="box-body">and unresolved stay distinct</text>
+
+  <rect x="800" y="605" width="230" height="108" rx="18" fill="#f1f5f9"/>
+  <text x="825" y="641" class="small">Durable workers</text>
+  <text x="825" y="672" class="box-body">Retries, stale-lock recovery,</text>
+  <text x="825" y="698" class="box-body">digest and resurfacing queues</text>
+
+  <rect x="1060" y="605" width="260" height="108" rx="18" fill="#f1f5f9"/>
+  <text x="1085" y="641" class="small">User control</text>
+  <text x="1085" y="672" class="box-body">Export, deletion, retention,</text>
+  <text x="1085" y="698" class="box-body">disconnect and opt-out</text>
+
+  <path d="M600 410 C600 470 520 475 520 515" class="arrow-dashed"/>
+  <path d="M1010 410 C1010 470 1080 475 1080 515" class="arrow-dashed"/>
+
+  <rect x="80" y="818" width="1440" height="2" fill="#cbd5e1"/>
+  <text x="80" y="858" class="small">Slack Agent View · Block Kit · Socket Mode · PostgreSQL · Google Calendar · OpenAI Structured Outputs</text>
+  <text x="1520" y="858" text-anchor="end" class="small">Public repository: github.com/Solanh/margin-slack-agent</text>
+</svg>

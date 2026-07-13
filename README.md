@@ -87,7 +87,34 @@ The current stacked implementation covers issues #1 through #11:
 - verified-series pre-meeting resurfacing with global/per-series opt-out;
 - deterministic owner-scoped private note retrieval by topic, meeting, mentioned name, type, priority, and status;
 - immutable-original retrieval through a validated private modal;
+- production Docker packaging, health/readiness checks, redacted logging, centralized retries, and owner data controls;
+- explicit model-refusal fallback and accurate provider-retention documentation;
 - PostgreSQL-backed integration tests in CI.
+
+## Demo and submission
+
+The repository includes a safe deterministic demo workflow:
+
+```bash
+export DATABASE_URL='postgresql://...'
+export DEMO_WORKSPACE_ID='T_REAL_WORKSPACE'
+export DEMO_USER_ID='U_REAL_DEMO_USER'
+export DEMO_SOURCE_CHANNEL_ID='D_REAL_MARGIN_DM'
+export DEMO_CONFIRM_RESET="${DEMO_WORKSPACE_ID}:${DEMO_USER_ID}"
+
+npm run migrate
+npm run demo:prepare
+npm start
+```
+
+`demo:reset` removes only Margin data owned by the explicitly named workspace/user and preserves the Slack installation and Google OAuth connection. Outside development/test, it also requires `DEMO_ALLOW_NON_DEVELOPMENT_RESET=true`.
+
+Submission assets:
+
+- [Three-minute demo script](docs/DEMO_SCRIPT.md)
+- [Devpost submission copy](docs/DEVPOST_SUBMISSION.md)
+- [Upload-ready architecture graphic](docs/architecture-overview.svg)
+- [Submission checklist](docs/SUBMISSION_CHECKLIST.md)
 
 ## Run the application
 
@@ -122,6 +149,7 @@ npm start
 - [Roadmap](docs/ROADMAP.md)
 - [Issue backlog](docs/ISSUE_BACKLOG.md)
 - [Hackathon demo script](docs/DEMO_SCRIPT.md)
+- [Devpost submission copy](docs/DEVPOST_SUBMISSION.md)
 - [Submission checklist](docs/SUBMISSION_CHECKLIST.md)
 - [Decision log](docs/DECISION_LOG.md)
 - [Research sources](docs/RESEARCH_SOURCES.md)
