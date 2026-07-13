@@ -23,23 +23,24 @@ The repository URL, deployed revision, and video must describe the same implemen
 ## 2. Update and reinstall the Slack app
 
 1. Open the existing Margin app in the Slack developer dashboard.
-2. apply the current `manifest.json` to the official developer sandbox;
-3. confirm Agent View, writable Messages, App Home, Socket Mode, and interactivity are enabled;
-4. confirm the bot event subscriptions are:
+2. Apply the current `manifest.json` to the official developer sandbox.
+3. Confirm Agent View, writable Messages, App Home, Socket Mode, and interactivity are enabled.
+4. Confirm the bot event subscriptions are:
    - `app_home_opened`;
    - `app_context_changed`;
    - `message.im`;
-   - `user_huddle_changed`;
-5. confirm the bot scopes are:
+   - `user_huddle_changed`.
+5. Confirm the bot scopes are:
    - `assistant:write`;
    - `chat:write`;
    - `files:write`;
    - `im:history`;
-   - `users:read`;
-6. reinstall the app after any scope, event, or manifest change;
-7. generate or confirm the `xapp-` Socket Mode token has `connections:write`.
+   - `im:write`;
+   - `users:read`.
+6. Reinstall the app after any scope, event, or manifest change.
+7. Generate or confirm the `xapp-` Socket Mode token has `connections:write`.
 
-Do not request `calls:read`. Margin does not read native huddle audio, transcripts, or participant history.
+`im:write` is required for `conversations.open`, which Margin uses for private digest, resurfacing, export, and deterministic demo delivery. Do not request `calls:read`. Margin does not read native huddle audio, transcripts, or participant history.
 
 ## 3. Configure the final environment
 
@@ -130,7 +131,7 @@ npm run preflight
 The preflight validates:
 
 - environment parsing and encryption-key length;
-- real-looking workspace and user IDs;
+- real Slack workspace and human user IDs;
 - PostgreSQL connectivity and current migrations;
 - the full deterministic seed dataset;
 - private Slack card delivery references;
