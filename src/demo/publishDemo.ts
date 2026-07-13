@@ -48,6 +48,15 @@ async function main(): Promise<void> {
       throw new Error("private_demo_channel_unavailable");
     }
 
+    await pool.query(
+      `UPDATE notes
+       SET source_channel_id = $3
+       WHERE workspace_id = $1
+         AND user_id = $2
+         AND source_message_ts LIKE 'margin-demo-%'`,
+      [owner.workspaceId, owner.userId, channelId],
+    );
+
     const userResult = await client.users.info({ user: owner.userId });
     const timeZone = userResult.user?.tz ?? "UTC";
     const meetings = new PostgresMeetingRepository(pool);
