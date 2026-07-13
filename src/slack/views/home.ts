@@ -202,7 +202,7 @@ export function buildMarginHomeView(state: MarginHomeViewState) {
 
   return {
     type: "home" as const,
-    blocks,
+    blocks: blocks as never,
   };
 }
 
