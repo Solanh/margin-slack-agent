@@ -13,6 +13,11 @@ const DatabaseEnvironmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
 });
 
+const HttpEnvironmentSchema = z.object({
+  HTTP_HOST: z.string().min(1).default("0.0.0.0"),
+  HTTP_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+});
+
 const EncryptionEnvironmentSchema = z.object({
   TOKEN_ENCRYPTION_KEY: z.string().min(1),
   TOKEN_ENCRYPTION_KEY_VERSION: z.coerce.number().int().positive().default(1),
@@ -33,7 +38,7 @@ const GoogleConfigurationSchema = z.object({
 
 const EnvironmentSchema = SlackEnvironmentSchema.merge(
   DatabaseEnvironmentSchema,
-);
+).merge(HttpEnvironmentSchema);
 
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type DatabaseEnvironment = z.infer<typeof DatabaseEnvironmentSchema>;
@@ -75,10 +80,24 @@ function parseEnvironment<T>(
   return result.data;
 }
 
+function normalizeApplicationEnvironment(
+  source: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  return {
+    ...source,
+    HTTP_HOST: source.HTTP_HOST ?? source.OAUTH_HTTP_HOST,
+    HTTP_PORT: source.HTTP_PORT ?? source.OAUTH_HTTP_PORT,
+  };
+}
+
 export function loadEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Environment {
-  return parseEnvironment("application", EnvironmentSchema, source);
+  return parseEnvironment(
+    "application",
+    EnvironmentSchema,
+    normalizeApplicationEnvironment(source),
+  );
 }
 
 export function loadDatabaseEnvironment(
