@@ -9,6 +9,7 @@ import type {
   OrganizeNoteService,
 } from "../services/organizeNote.js";
 import type { SlackContextSignalService } from "../services/slackContextSignals.js";
+import type { UserDataControlService } from "../services/userDataControls.js";
 import {
   buildCaptureFailureAcknowledgement,
 } from "./views/captureAcknowledgement.js";
@@ -52,6 +53,7 @@ export interface SlackListenerDependencies {
   contextResolver: ContextResolutionService;
   calendarConnections: GoogleCalendarConnectionService;
   slackContextSignals: SlackContextSignalService;
+  userDataControls: UserDataControlService;
 }
 
 interface HandlePrivateNoteInput {
@@ -269,12 +271,15 @@ export function registerSlackListeners(
 
     try {
       const workspaceId = getWorkspaceId(body);
-      const calendarConnected = workspaceId
-        ? await dependencies.calendarConnections.isConnected({
-            workspaceId,
-            userId: event.user,
-          })
-        : false;
+      const owner = workspaceId
+        ? { workspaceId, userId: event.user }
+        : null;
+      const [calendarConnected, dataSettings] = owner
+        ? await Promise.all([
+            dependencies.calendarConnections.isConnected(owner),
+            dependencies.userDataControls.getSettings(owner),
+          ])
+        : [false, undefined];
 
       if (workspaceId && event.context) {
         await dependencies.slackContextSignals.recordAppContext(
@@ -288,7 +293,11 @@ export function registerSlackListeners(
 
       await client.views.publish({
         user_id: event.user,
-        view: buildMarginHomeView({ calendarConnected }),
+        view: buildMarginHomeView({
+          calendarAvailable: dependencies.calendarConnections.isAvailable(),
+          calendarConnected,
+          ...(dataSettings ? { dataSettings } : {}),
+        }),
       });
     } catch (error) {
       logger.error("Unable to publish Margin App Home", error);

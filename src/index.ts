@@ -23,6 +23,10 @@ import { OrganizeNoteService } from "./services/organizeNote.js";
 import { PostMeetingDigestService } from "./services/postMeetingDigest.js";
 import { PreMeetingResurfacingService } from "./services/preMeetingResurfacing.js";
 import { SlackContextSignalService } from "./services/slackContextSignals.js";
+import {
+  RetentionCleanupService,
+  UserDataControlService,
+} from "./services/userDataControls.js";
 import { createSlackApp } from "./slack/app.js";
 import { getMigrationStatus } from "./storage/migrationStatus.js";
 import { createPostgresPool } from "./storage/postgres.js";
@@ -37,6 +41,7 @@ import { PostgresPostMeetingDigestRepository } from "./storage/postgresPostMeeti
 import { PostgresPreMeetingResurfacingRepository } from "./storage/postgresPreMeetingResurfacingRepository.js";
 import { PostgresSlackContextSignalRepository } from "./storage/postgresSlackContextSignalRepository.js";
 import { PostgresTransformationRepository } from "./storage/postgresTransformationRepository.js";
+import { PostgresUserDataRepository } from "./storage/postgresUserDataRepository.js";
 
 const environment = loadEnvironment();
 const aiEnvironment = loadAIEnvironment();
@@ -76,6 +81,7 @@ const slackContextSignalRepository =
 const slackContextSignals = new SlackContextSignalService(
   slackContextSignalRepository,
 );
+const userDataRepository = new PostgresUserDataRepository(pool);
 
 let calendarConnections: GoogleCalendarConnectionService;
 let googleCalendar: GoogleCalendarApiService;
@@ -100,6 +106,10 @@ if (googleEnvironment.enabled) {
   googleCalendar = GoogleCalendarApiService.disabled();
 }
 
+const userDataControls = new UserDataControlService(
+  userDataRepository,
+  calendarConnections,
+);
 const contextResolver = new ContextResolutionService(
   noteRepository,
   meetingRepository,
@@ -134,8 +144,10 @@ const app = createSlackApp(environment, {
   slackContextSignals,
   postMeetingDigests,
   preMeetingResurfacings,
+  userDataControls,
 });
 const digestWorker = new PostMeetingDigestService(postMeetingDigests, app.client);
+const retentionWorker = new RetentionCleanupService(userDataRepository);
 const resurfacingWorker = googleEnvironment.enabled
   ? new PreMeetingResurfacingService(
       preMeetingResurfacings,
@@ -180,19 +192,21 @@ async function start(): Promise<void> {
   readiness.markSlackStarted();
   digestWorker.start();
   readiness.markDigestWorkerStarted();
+  retentionWorker.start();
   if (resurfacingWorker) {
     resurfacingWorker.start();
     readiness.markResurfacingWorkerStarted();
   }
   console.log(
     googleEnvironment.enabled
-      ? "Margin is ready with Slack, PostgreSQL, workers, private note retrieval, scored context resolution, note organization, and Google Calendar."
-      : "Margin is ready with Slack, PostgreSQL, workers, private note retrieval, Slack context resolution, and note organization. Google Calendar integration is disabled.",
+      ? "Margin is ready with Slack, PostgreSQL, workers, private data controls, note retrieval, scored context resolution, note organization, and Google Calendar."
+      : "Margin is ready with Slack, PostgreSQL, workers, private data controls, note retrieval, Slack context resolution, and note organization. Google Calendar integration is disabled.",
   );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
+  retentionWorker.stop();
   resurfacingWorker?.stop();
   readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
@@ -214,6 +228,7 @@ process.on("SIGTERM", () => {
 
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", describeError(error));
+  retentionWorker.stop();
   resurfacingWorker?.stop();
   readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
