@@ -1,5 +1,6 @@
 import { LogLevel } from "@slack/bolt";
 import { describe, expect, it } from "vitest";
+import { OpenAITransformationRefusalError } from "../src/services/openAITransformationModel.js";
 import {
   SafeStructuredLogger,
   classifyError,
@@ -35,6 +36,26 @@ describe("SafeStructuredLogger", () => {
         name: "error",
         category: "unknown",
       },
+    });
+  });
+
+  it("does not emit refusal or note content", () => {
+    const records: SafeLogRecord[] = [];
+    const logger = new SafeStructuredLogger(LogLevel.INFO, (record) => {
+      records.push(record);
+    });
+
+    logger.error(
+      "refusal: sensitive refusal detail for private note words",
+      new OpenAITransformationRefusalError(),
+    );
+
+    const serialized = JSON.stringify(records[0]);
+    expect(serialized).not.toContain("sensitive refusal detail");
+    expect(serialized).not.toContain("private note words");
+    expect(records[0]?.error).toMatchObject({
+      name: "openaitransformationrefusalerror",
+      category: "programming",
     });
   });
 

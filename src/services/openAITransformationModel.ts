@@ -10,6 +10,13 @@ import type {
   TransformationModel,
 } from "./transformation.js";
 
+export class OpenAITransformationRefusalError extends Error {
+  constructor() {
+    super("OpenAI transformation was refused");
+    this.name = "OpenAITransformationRefusalError";
+  }
+}
+
 export class OpenAITransformationModel implements TransformationModel {
   private readonly client: OpenAI;
 
@@ -42,10 +49,57 @@ export class OpenAITransformationModel implements TransformationModel {
       store: false,
     });
 
+    if (hasOpenAIRefusal(response)) {
+      throw new OpenAITransformationRefusalError();
+    }
+
     if (!response.output_parsed) {
       throw new Error("OpenAI returned no parsed transformation");
     }
 
     return response.output_parsed;
   }
+}
+
+export function hasOpenAIRefusal(response: unknown): boolean {
+  const record = asRecord(response);
+  if (!record || !Array.isArray(record.output)) {
+    return false;
+  }
+
+  for (const outputItem of record.output) {
+    const item = asRecord(outputItem);
+    if (!item) {
+      continue;
+    }
+
+    if (item.type === "refusal") {
+      return true;
+    }
+
+    if (!Array.isArray(item.content)) {
+      continue;
+    }
+
+    for (const contentItem of item.content) {
+      const content = asRecord(contentItem);
+      if (!content) {
+        continue;
+      }
+      if (
+        content.type === "refusal" ||
+        typeof content.refusal === "string"
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
 }

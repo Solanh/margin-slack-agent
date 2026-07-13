@@ -1,6 +1,10 @@
 import type { OpenAI } from "openai";
 import { describe, expect, it, vi } from "vitest";
-import { OpenAITransformationModel } from "../src/services/openAITransformationModel.js";
+import {
+  hasOpenAIRefusal,
+  OpenAITransformationModel,
+  OpenAITransformationRefusalError,
+} from "../src/services/openAITransformationModel.js";
 
 const parsedTransformation = {
   organizedText: "Question: Does the migration affect customers?",
@@ -16,6 +20,7 @@ describe("OpenAITransformationModel", () => {
   it("uses structured Responses output without tools or server storage", async () => {
     const parse = vi.fn(async (_request: unknown) => ({
       output_parsed: parsedTransformation,
+      output: [],
     }));
     const client = {
       responses: { parse },
@@ -58,10 +63,72 @@ describe("OpenAITransformationModel", () => {
     expect(request.text.format).toBeDefined();
   });
 
+  it("detects refusal content before reading parsed output", async () => {
+    const client = {
+      responses: {
+        parse: vi.fn(async (_request: unknown) => ({
+          output_parsed: null,
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "refusal",
+                  refusal: "sensitive refusal detail that must not be logged",
+                },
+              ],
+            },
+          ],
+        })),
+      },
+    } as unknown as OpenAI;
+    const model = new OpenAITransformationModel(
+      "test-api-key",
+      "configured-model",
+      client,
+    );
+
+    await expect(
+      model.transform({
+        rawText: "remember this",
+        userTimeZone: "America/New_York",
+      }),
+    ).rejects.toBeInstanceOf(OpenAITransformationRefusalError);
+  });
+
+  it("recognizes both message content and top-level refusal shapes", () => {
+    expect(
+      hasOpenAIRefusal({
+        output: [
+          {
+            type: "message",
+            content: [{ type: "refusal", refusal: "detail" }],
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      hasOpenAIRefusal({ output: [{ type: "refusal", refusal: "detail" }] }),
+    ).toBe(true);
+    expect(
+      hasOpenAIRefusal({
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "safe" }],
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("rejects a response with no parsed structured output", async () => {
     const client = {
       responses: {
-        parse: vi.fn(async (_request: unknown) => ({ output_parsed: null })),
+        parse: vi.fn(async (_request: unknown) => ({
+          output_parsed: null,
+          output: [],
+        })),
       },
     } as unknown as OpenAI;
     const model = new OpenAITransformationModel(

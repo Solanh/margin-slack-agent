@@ -8,6 +8,7 @@ import type {
   NoteRepository,
   TransformationRepository,
 } from "../storage/noteRepository.js";
+import { OpenAITransformationRefusalError } from "./openAITransformationModel.js";
 import {
   transformNote,
   type TransformationModel,
@@ -23,7 +24,11 @@ export type OrganizeNoteResult =
   | {
       status: "verbatim";
       note: Note;
-      reason: "provider_failure" | "invalid_output" | "persistence_failure";
+      reason:
+        | "model_refusal"
+        | "provider_failure"
+        | "invalid_output"
+        | "persistence_failure";
     };
 
 export interface OrganizeNoteInput extends OwnerScope {
@@ -65,12 +70,14 @@ export class OrganizeNoteService {
         status: "verbatim",
         note,
         reason:
-          error instanceof SyntaxError ||
-          (error instanceof Error &&
-            (error.name === "ZodError" ||
-              error.name === "UnsafeTransformationError"))
-            ? "invalid_output"
-            : "provider_failure",
+          error instanceof OpenAITransformationRefusalError
+            ? "model_refusal"
+            : error instanceof SyntaxError ||
+                (error instanceof Error &&
+                  (error.name === "ZodError" ||
+                    error.name === "UnsafeTransformationError"))
+              ? "invalid_output"
+              : "provider_failure",
       };
     }
 

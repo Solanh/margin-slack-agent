@@ -15,6 +15,7 @@ Margin promises:
 7. It keeps notes private unless the user explicitly shares them.
 8. Calendar access is optional and revocable.
 9. Slack huddle and active-view signals are short-lived and optional.
+10. Model refusal or provider failure never deletes the saved original.
 
 ## Provenance labels
 
@@ -38,7 +39,8 @@ Instead:
 - transformations are conservative;
 - quotes are never created unless present in the raw text;
 - uncertain interpretation is flagged;
-- users can select **Keep verbatim**.
+- users can select **Keep verbatim**;
+- refusal and failure paths keep the original authoritative.
 
 ## Data minimization
 
@@ -63,6 +65,27 @@ Do not send:
 Google Calendar requests use a partial-response field list. Limited attendee email identifiers are stored only for deterministic matching and are not passed to the model.
 
 Slack active-view context stores only a channel ID and optional message timestamp. Margin does not fetch the corresponding name, message text, thread, or history. Huddle state stores only active state, optional opaque call ID, and observation/expiration timestamps.
+
+## OpenAI data controls and retention
+
+Margin sends transformation requests with `store: false`. This disables Responses API application-state storage for those requests. It does not by itself guarantee zero provider retention.
+
+OpenAI documents that:
+
+- API data is not used to train models by default unless an organization opts in;
+- standard abuse-monitoring logs may retain customer content for up to 30 days;
+- Zero Data Retention and Modified Abuse Monitoring are account-level controls that require approval and configuration;
+- Structured Outputs may return a refusal instead of the requested schema.
+
+Margin therefore does not claim Zero Data Retention merely because this repository sets `store: false`.
+
+Official references:
+
+- https://platform.openai.com/docs/guides/your-data
+- https://platform.openai.com/docs/guides/structured-outputs
+- https://openai.com/enterprise-privacy/
+
+When a structured-output refusal occurs, Margin detects it before reading parsed output, discards the refusal content, records no derived transformation, and returns the already-saved note verbatim. Refusal content and note bodies are not written to logs.
 
 ## Google OAuth controls
 
@@ -96,13 +119,15 @@ A huddle record uses `Slack huddle (title unavailable)` and an empty participant
 ## Privacy defaults
 
 - private app DM only;
-- no shared exports by default;
+- exports delivered only to the owner's private Margin DM;
 - reminders delivered privately;
 - App Home scoped to the current user;
-- Calendar disconnected by default;
+- Calendar disabled or disconnected by default;
 - no audio, transcript, or unrelated history access;
 - configurable retention;
-- deletion removes derived content, embeddings, and reminders associated with the note.
+- confirmed owner-scoped delete-all;
+- encrypted OAuth credentials excluded from exports;
+- proactive notifications can be disabled globally.
 
 ## Abuse and failure cases
 
@@ -116,13 +141,13 @@ Control: extract a speaker only when the raw note explicitly contains the attrib
 
 Risk: a private note is posted to a channel.
 
-Control: capture, stored card references, and interaction updates require Slack DM channel identifiers. Channel sharing is not in the MVP.
+Control: capture, stored card references, exports, and interaction updates require Slack DM channel identifiers. Channel sharing is not in the MVP.
 
 ### Calendar mismatch
 
 Risk: overlapping events cause the wrong context.
 
-Control: retain every plausible event candidate. Auto-attach only when exactly one candidate exists. Multiple candidates remain unresolved.
+Control: retain every plausible event candidate. Auto-attach only when scoring meets the configured threshold and separation rule. Ambiguous candidates remain unresolved.
 
 ### Huddle metadata overclaim
 
@@ -148,11 +173,23 @@ Risk: note text contains instructions aimed at the model.
 
 Control: treat note text as data, enforce schema, ignore tool directives, and give the transformation model no external tools.
 
+### Model refusal
+
+Risk: a refusal is mistaken for malformed output or refusal text is retained in logs.
+
+Control: detect refusal content explicitly, throw a content-free refusal error, classify it as `model_refusal`, persist no transformation, and keep the original note verbatim.
+
 ### Sensitive content leakage in logs
 
-Risk: raw notes, tokens, authorization codes, Calendar details, or Slack context are written to observability systems.
+Risk: raw notes, tokens, authorization codes, Calendar details, refusal text, or Slack context are written to observability systems.
 
-Control: log identifiers and failure categories, not note bodies, credentials, context content, or event payloads.
+Control: use the structured safe logger, emit categories and fingerprints rather than messages or payloads, hash owner references, and redact process-level failures.
+
+### Cross-owner export or deletion
+
+Risk: a user exports or deletes another user's records.
+
+Control: every export, retention, preference, and deletion query includes workspace and user ownership. Integration tests create multiple owners in one workspace and verify isolation.
 
 ## User controls
 
@@ -162,13 +199,14 @@ Current:
 - edit organized wording;
 - change priority;
 - change meeting context;
-- keep verbatim/use organized.
+- keep verbatim/use organized;
+- enable/disable proactive notifications;
+- select a retention period;
+- export owner data privately;
+- delete all owner data with confirmation.
 
 Planned:
 
-- enable/disable post-meeting digests;
-- enable/disable proactive resurfacing;
-- default retention;
-- export all data;
-- delete all data;
-- display original by default.
+- display original by default;
+- more granular notification schedules;
+- additional export formats.
