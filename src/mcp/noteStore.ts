@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Pool, QueryResultRow } from "pg";
 import {
   ContextConfidenceSchema,
@@ -9,6 +10,21 @@ import {
   PrioritySchema,
   type OwnerScope,
 } from "../domain/note.js";
+
+export type McpNoteSourceType = "mcp" | "slack_channel" | "slack_message";
+
+export interface McpNoteSource {
+  sourceType: McpNoteSourceType;
+  channelId: string | null;
+  messageTs: string | null;
+  permalink: string | null;
+  createdAt: string;
+}
+
+export interface McpNoteReview {
+  reasons: Array<"verbatim_only" | "meeting_context" | "uncertainties">;
+  confirmedAt: string | null;
+}
 
 export interface McpNote {
   id: string;
@@ -34,6 +50,8 @@ export interface McpNote {
     endsAt: string;
     participants: string[];
   } | null;
+  sources?: McpNoteSource[];
+  review?: McpNoteReview;
 }
 
 export interface McpNoteSearch {
@@ -50,9 +68,28 @@ export interface McpNoteSearch {
   limit: number;
 }
 
+export interface CreateMcpNoteInput {
+  text: string;
+  noteType?: string | undefined;
+  priority?: string | undefined;
+  requestKey: string;
+  source?: {
+    sourceType: Exclude<McpNoteSourceType, "mcp">;
+    channelId: string;
+    messageTs?: string | undefined;
+    permalink?: string | undefined;
+  } | undefined;
+}
+
 export interface MarginMcpNoteStore {
   search(owner: OwnerScope, request: McpNoteSearch): Promise<McpNote[]>;
   getById(owner: OwnerScope, noteId: string): Promise<McpNote | null>;
+}
+
+export interface MarginMcpNoteMutationStore {
+  create(owner: OwnerScope, input: CreateMcpNoteInput): Promise<McpNote>;
+  listNeedsReview(owner: OwnerScope, limit: number): Promise<McpNote[]>;
+  confirmReview(owner: OwnerScope, noteId: string): Promise<McpNote | null>;
 }
 
 interface NoteRow extends QueryResultRow {
@@ -77,6 +114,12 @@ interface NoteRow extends QueryResultRow {
   meeting_starts_at: Date | string | null;
   meeting_ends_at: Date | string | null;
   meeting_participants: unknown;
+  sources: unknown;
+  review_confirmed_at: Date | string | null;
+}
+
+interface IdRow extends QueryResultRow {
+  id: string;
 }
 
 const NOTE_COLUMNS = `
@@ -100,16 +143,44 @@ const NOTE_COLUMNS = `
   m.provider AS meeting_provider,
   m.starts_at AS meeting_starts_at,
   m.ends_at AS meeting_ends_at,
-  m.participants AS meeting_participants
+  m.participants AS meeting_participants,
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'sourceType', source.source_type,
+          'channelId', source.channel_id,
+          'messageTs', source.message_ts,
+          'permalink', source.permalink,
+          'createdAt', source.created_at
+        )
+        ORDER BY source.created_at ASC, source.id ASC
+      )
+      FROM note_sources AS source
+      WHERE source.note_id = n.id
+        AND source.workspace_id = n.workspace_id
+        AND source.user_id = n.user_id
+    ),
+    '[]'::jsonb
+  ) AS sources,
+  review.confirmed_at AS review_confirmed_at
+`;
+
+const NOTE_JOINS = `
+  LEFT JOIN meetings m
+    ON m.id = n.meeting_id
+   AND m.workspace_id = n.workspace_id
+   AND m.user_id = n.user_id
+  LEFT JOIN note_review_confirmations review
+    ON review.note_id = n.id
+   AND review.workspace_id = n.workspace_id
+   AND review.user_id = n.user_id
 `;
 
 const SEARCH_SQL = `
   SELECT ${NOTE_COLUMNS}
   FROM notes n
-  LEFT JOIN meetings m
-    ON m.id = n.meeting_id
-   AND m.workspace_id = n.workspace_id
-   AND m.user_id = n.user_id
+  ${NOTE_JOINS}
   WHERE n.workspace_id = $1
     AND n.user_id = $2
     AND (
@@ -137,17 +208,84 @@ const SEARCH_SQL = `
 const GET_BY_ID_SQL = `
   SELECT ${NOTE_COLUMNS}
   FROM notes n
-  LEFT JOIN meetings m
-    ON m.id = n.meeting_id
-   AND m.workspace_id = n.workspace_id
-   AND m.user_id = n.user_id
+  ${NOTE_JOINS}
   WHERE n.workspace_id = $1
     AND n.user_id = $2
     AND n.id = $3
   LIMIT 1
 `;
 
-export class PostgresMarginMcpNoteStore implements MarginMcpNoteStore {
+const LIST_NEEDS_REVIEW_SQL = `
+  SELECT ${NOTE_COLUMNS}
+  FROM notes n
+  ${NOTE_JOINS}
+  WHERE n.workspace_id = $1
+    AND n.user_id = $2
+    AND review.note_id IS NULL
+    AND (
+      n.organized_text IS NULL
+      OR n.context_resolution_status = 'needs_clarification'
+      OR jsonb_array_length(n.uncertainties) > 0
+    )
+  ORDER BY n.created_at DESC, n.id ASC
+  LIMIT $3
+`;
+
+const CREATE_SQL = `
+  WITH created_note AS (
+    INSERT INTO notes (
+      id,
+      workspace_id,
+      user_id,
+      source_channel_id,
+      source_message_ts,
+      raw_text,
+      note_type,
+      priority
+    )
+    VALUES ($1, $2, $3, 'MCP', $4, $5, $6, $7)
+    ON CONFLICT (workspace_id, user_id, source_message_ts)
+    DO UPDATE SET source_message_ts = notes.source_message_ts
+    RETURNING id
+  ),
+  created_source AS (
+    INSERT INTO note_sources (
+      id,
+      note_id,
+      workspace_id,
+      user_id,
+      source_type,
+      channel_id,
+      message_ts,
+      permalink
+    )
+    SELECT $8, id, $2, $3, $9, $10, $11, $12
+    FROM created_note
+    ON CONFLICT DO NOTHING
+  )
+  SELECT id FROM created_note
+`;
+
+const CONFIRM_REVIEW_SQL = `
+  INSERT INTO note_review_confirmations (
+    note_id,
+    workspace_id,
+    user_id,
+    confirmed_at
+  )
+  SELECT id, workspace_id, user_id, NOW()
+  FROM notes
+  WHERE id = $1
+    AND workspace_id = $2
+    AND user_id = $3
+  ON CONFLICT (note_id, workspace_id, user_id)
+  DO UPDATE SET confirmed_at = EXCLUDED.confirmed_at
+  RETURNING note_id AS id
+`;
+
+export class PostgresMarginMcpNoteStore
+  implements MarginMcpNoteStore, MarginMcpNoteMutationStore
+{
   constructor(private readonly pool: Pick<Pool, "query">) {}
 
   async search(owner: OwnerScope, request: McpNoteSearch): Promise<McpNote[]> {
@@ -184,7 +322,56 @@ export class PostgresMarginMcpNoteStore implements MarginMcpNoteStore {
     return row ? this.mapRow(row) : null;
   }
 
+  async create(owner: OwnerScope, input: CreateMcpNoteInput): Promise<McpNote> {
+    const source = input.source;
+    const created = await this.pool.query<IdRow>(CREATE_SQL, [
+      randomUUID(),
+      owner.workspaceId,
+      owner.userId,
+      `mcp:capture:${input.requestKey}`,
+      input.text,
+      input.noteType ?? null,
+      input.priority ?? "normal",
+      randomUUID(),
+      source?.sourceType ?? "mcp",
+      source?.channelId ?? null,
+      source?.messageTs ?? null,
+      source?.permalink ?? null,
+    ]);
+    const noteId = created.rows[0]?.id;
+    if (!noteId) {
+      throw new Error("PostgreSQL did not return the MCP-captured note");
+    }
+    const note = await this.getById(owner, noteId);
+    if (!note) {
+      throw new Error("MCP-captured note could not be read back");
+    }
+    return note;
+  }
+
+  async listNeedsReview(owner: OwnerScope, limit: number): Promise<McpNote[]> {
+    const result = await this.pool.query<NoteRow>(LIST_NEEDS_REVIEW_SQL, [
+      owner.workspaceId,
+      owner.userId,
+      limit,
+    ]);
+    return result.rows.map((row) => this.mapRow(row));
+  }
+
+  async confirmReview(owner: OwnerScope, noteId: string): Promise<McpNote | null> {
+    const confirmed = await this.pool.query<IdRow>(CONFIRM_REVIEW_SQL, [
+      noteId,
+      owner.workspaceId,
+      owner.userId,
+    ]);
+    if (!confirmed.rows[0]?.id) {
+      return null;
+    }
+    return this.getById(owner, noteId);
+  }
+
   private mapRow(row: NoteRow): McpNote {
+    const uncertainties = this.stringArray(row.uncertainties);
     return {
       id: row.id,
       rawText: row.raw_text,
@@ -200,7 +387,7 @@ export class PostgresMarginMcpNoteStore implements MarginMcpNoteStore {
       ),
       reminderIntent: row.reminder_intent,
       explicitDueAt: this.optionalIso(row.explicit_due_at),
-      uncertainties: this.stringArray(row.uncertainties),
+      uncertainties,
       createdAt: this.iso(row.created_at),
       updatedAt: this.iso(row.updated_at),
       meeting:
@@ -218,7 +405,69 @@ export class PostgresMarginMcpNoteStore implements MarginMcpNoteStore {
               participants: this.stringArray(row.meeting_participants),
             }
           : null,
+      sources: this.sources(row.sources),
+      review: {
+        reasons: this.reviewReasons(row, uncertainties),
+        confirmedAt: this.optionalIso(row.review_confirmed_at),
+      },
     };
+  }
+
+  private reviewReasons(
+    row: NoteRow,
+    uncertainties: string[],
+  ): McpNoteReview["reasons"] {
+    const reasons: McpNoteReview["reasons"] = [];
+    if (row.organized_text === null) {
+      reasons.push("verbatim_only");
+    }
+    if (row.context_resolution_status === "needs_clarification") {
+      reasons.push("meeting_context");
+    }
+    if (uncertainties.length > 0) {
+      reasons.push("uncertainties");
+    }
+    return reasons;
+  }
+
+  private sources(value: unknown): McpNoteSource[] {
+    if (!Array.isArray(value)) {
+      throw new Error("Expected PostgreSQL note sources to be an array");
+    }
+    return value.map((item) => {
+      if (typeof item !== "object" || item === null || Array.isArray(item)) {
+        throw new Error("Expected each PostgreSQL note source to be an object");
+      }
+      const source = item as Record<string, unknown>;
+      const sourceType = source.sourceType;
+      if (
+        sourceType !== "mcp" &&
+        sourceType !== "slack_channel" &&
+        sourceType !== "slack_message"
+      ) {
+        throw new Error("Unexpected note source type");
+      }
+      if (typeof source.createdAt !== "string") {
+        throw new Error("Expected note source createdAt to be a string");
+      }
+      return {
+        sourceType,
+        channelId: this.optionalString(source.channelId),
+        messageTs: this.optionalString(source.messageTs),
+        permalink: this.optionalString(source.permalink),
+        createdAt: this.iso(source.createdAt),
+      };
+    });
+  }
+
+  private optionalString(value: unknown): string | null {
+    if (value === null) {
+      return null;
+    }
+    if (typeof value !== "string") {
+      throw new Error("Expected PostgreSQL value to be a string or null");
+    }
+    return value;
   }
 
   private stringArray(value: unknown): string[] {
