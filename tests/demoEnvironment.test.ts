@@ -70,6 +70,12 @@ describe("demo environment", () => {
 
     expect(() =>
       assertDemoResetAllowed(owner, {
+        DEMO_CONFIRM_RESET: "T123:U123",
+      }),
+    ).toThrow("Refusing demo reset outside development/test");
+
+    expect(() =>
+      assertDemoResetAllowed(owner, {
         NODE_ENV: "production",
         DEMO_CONFIRM_RESET: "T123:U123",
         DEMO_ALLOW_NON_DEVELOPMENT_RESET: "true",
