@@ -7,7 +7,7 @@
     "name": "Margin",
     "description": "Private meeting memory for Slack.",
     "long_description": "Margin is a private meeting-memory agent for Slack. Send it a short note during a huddle or scheduled meeting, and it preserves the original text, attaches trustworthy meeting context, organizes the note, and resurfaces it when it becomes useful.",
-    "background_color": "#2F3136"
+    "background_color": "#242433"
   },
   "features": {
     "app_home": {

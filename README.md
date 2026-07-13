@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/margin-logo.svg" alt="Margin — private meeting memory for Slack" width="640">
+</p>
+
 # Margin
 
 > **Working title:** Margin — your private margin notes for meetings in Slack.
@@ -122,6 +126,9 @@ npm run preflight:live
 
 Submission assets:
 
+- [Margin branding and Slack icon](docs/BRANDING.md)
+- [Slack-ready app icon](assets/margin-app-icon.png)
+- [Vector logo lockup](assets/margin-logo.svg)
 - [Final submission runbook](docs/FINAL_SUBMISSION_RUNBOOK.md)
 - [Three-minute demo script](docs/DEMO_SCRIPT.md)
 - [Devpost submission copy](docs/DEVPOST_SUBMISSION.md)
@@ -152,6 +159,7 @@ npm run --silent mcp
 ## Documentation
 
 - [Slack developer sandbox setup](docs/SLACK_SETUP.md)
+- [Branding and Slack app icon](docs/BRANDING.md)
 - [PostgreSQL setup](docs/DATABASE_SETUP.md)
 - [Google Calendar integration](docs/GOOGLE_CALENDAR.md)
 - [Slack huddle and Agent-context signals](docs/SLACK_CONTEXT_SIGNALS.md)
