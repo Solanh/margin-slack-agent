@@ -22,6 +22,7 @@ import { OpenAITransformationModel } from "./services/openAITransformationModel.
 import { OrganizeNoteService } from "./services/organizeNote.js";
 import { PostMeetingDigestService } from "./services/postMeetingDigest.js";
 import { PreMeetingResurfacingService } from "./services/preMeetingResurfacing.js";
+import { ReminderDeliveryService } from "./services/reminderDelivery.js";
 import { SlackContextSignalService } from "./services/slackContextSignals.js";
 import {
   RetentionCleanupService,
@@ -39,6 +40,7 @@ import { PostgresOAuthAuthorizationStateRepository } from "./storage/postgresOAu
 import { PostgresOAuthConnectionRepository } from "./storage/postgresOAuthConnectionRepository.js";
 import { PostgresPostMeetingDigestRepository } from "./storage/postgresPostMeetingDigestRepository.js";
 import { PostgresPreMeetingResurfacingRepository } from "./storage/postgresPreMeetingResurfacingRepository.js";
+import { PostgresReminderRepository } from "./storage/postgresReminderRepository.js";
 import { PostgresSlackContextSignalRepository } from "./storage/postgresSlackContextSignalRepository.js";
 import { PostgresTransformationRepository } from "./storage/postgresTransformationRepository.js";
 import { PostgresUserDataRepository } from "./storage/postgresUserDataRepository.js";
@@ -67,6 +69,7 @@ const contextCandidateRepository = new PostgresContextCandidateRepository(
 const postMeetingDigests = new PostgresPostMeetingDigestRepository(pool);
 const preMeetingResurfacings =
   new PostgresPreMeetingResurfacingRepository(pool);
+const reminders = new PostgresReminderRepository(pool);
 const transformationRepository = new PostgresTransformationRepository(
   pool,
   noteRepository,
@@ -147,6 +150,7 @@ const app = createSlackApp(environment, {
   userDataControls,
 });
 const digestWorker = new PostMeetingDigestService(postMeetingDigests, app.client);
+const reminderWorker = new ReminderDeliveryService(reminders, app.client);
 const retentionWorker = new RetentionCleanupService(userDataRepository);
 const resurfacingWorker = googleEnvironment.enabled
   ? new PreMeetingResurfacingService(
@@ -192,6 +196,7 @@ async function start(): Promise<void> {
   readiness.markSlackStarted();
   digestWorker.start();
   readiness.markDigestWorkerStarted();
+  reminderWorker.start();
   retentionWorker.start();
   if (resurfacingWorker) {
     resurfacingWorker.start();
@@ -199,14 +204,15 @@ async function start(): Promise<void> {
   }
   console.log(
     googleEnvironment.enabled
-      ? "Margin is ready with Slack, PostgreSQL, workers, private data controls, note retrieval, scored context resolution, note organization, and Google Calendar."
-      : "Margin is ready with Slack, PostgreSQL, workers, private data controls, note retrieval, Slack context resolution, and note organization. Google Calendar integration is disabled.",
+      ? "Margin is ready with Slack, PostgreSQL, reminder delivery, workers, private data controls, note retrieval, scored context resolution, note organization, and Google Calendar."
+      : "Margin is ready with Slack, PostgreSQL, reminder delivery, workers, private data controls, note retrieval, Slack context resolution, and note organization. Google Calendar integration is disabled.",
   );
 }
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; stopping Margin.`);
   retentionWorker.stop();
+  reminderWorker.stop();
   resurfacingWorker?.stop();
   readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
@@ -229,6 +235,7 @@ process.on("SIGTERM", () => {
 start().catch(async (error: unknown) => {
   console.error("Margin failed to start", describeError(error));
   retentionWorker.stop();
+  reminderWorker.stop();
   resurfacingWorker?.stop();
   readiness.markResurfacingWorkerStopped();
   digestWorker.stop();
