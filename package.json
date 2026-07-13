@@ -11,6 +11,7 @@
     "demo:prepare": "npm run build && node dist/demo/resetDemoData.js && node dist/demo/seedFullDemo.js",
     "demo:publish": "npm run build && node dist/demo/publishDemo.js",
     "demo:seed:resurfacing": "npm run build && node dist/demo/seedPreMeetingResurfacing.js",
+    "mcp": "node dist/mcp/server.js",
     "preflight": "npm run build && node dist/demo/preflight.js",
     "preflight:live": "npm run build && node dist/demo/preflight.js --require-live",
     "migrate": "npm run build && npm run migrate:runtime",
