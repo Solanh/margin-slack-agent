@@ -1,5 +1,6 @@
 import type { OwnerScope } from "../domain/note.js";
 import type {
+  DashboardUpcomingItem,
   NoteRetrievalRequest,
   RetrievedNote,
   RetrievedOriginalNote,
@@ -15,4 +16,9 @@ export interface NoteRetrievalRepository {
     owner: OwnerScope,
     noteId: string,
   ): Promise<RetrievedOriginalNote | null>;
+
+  listUpcoming(
+    owner: OwnerScope,
+    limit: number,
+  ): Promise<DashboardUpcomingItem[]>;
 }

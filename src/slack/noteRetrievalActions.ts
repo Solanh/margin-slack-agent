@@ -17,19 +17,23 @@ export function registerNoteRetrievalActions(
         const record = asRecord(body, "Slack retrieval action");
         const team = asRecord(record.team, "Slack team");
         const user = asRecord(record.user, "Slack user");
-        const channel = asRecord(record.channel, "Slack channel");
         const actionRecord = asRecord(action, "Slack button action");
         const workspaceId = requiredString(team.id, "workspace ID");
         const userId = requiredString(user.id, "user ID");
-        const channelId = requiredString(channel.id, "channel ID");
         const triggerId = requiredString(record.trigger_id, "trigger ID");
         const noteId = z
           .string()
           .uuid()
           .parse(requiredString(actionRecord.value, "note ID"));
 
-        if (!channelId.startsWith("D")) {
-          throw new Error("Retrieved originals may only be opened from a DM");
+        if (record.channel !== undefined) {
+          const channel = asRecord(record.channel, "Slack channel");
+          const channelId = requiredString(channel.id, "channel ID");
+          if (!channelId.startsWith("D")) {
+            throw new Error(
+              "Retrieved originals may only be opened from a DM or private App Home",
+            );
+          }
         }
 
         const original = await retrieval.getOriginal(

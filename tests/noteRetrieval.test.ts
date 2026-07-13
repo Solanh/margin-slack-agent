@@ -75,6 +75,7 @@ describe("private note retrieval", () => {
     const repository: NoteRetrievalRepository = {
       search: vi.fn(async () => []),
       getOriginal: vi.fn(async () => null),
+      listUpcoming: vi.fn(async () => []),
     };
     const service = new NoteRetrievalService(repository);
 
@@ -92,6 +93,38 @@ describe("private note retrieval", () => {
       owner,
       "11111111-1111-4111-8111-111111111111",
     );
+  });
+
+  it("builds bounded owner-scoped App Home sections", async () => {
+    const repository: NoteRetrievalRepository = {
+      search: vi.fn(async () => []),
+      getOriginal: vi.fn(async () => null),
+      listUpcoming: vi.fn(async () => []),
+    };
+    const service = new NoteRetrievalService(repository);
+
+    const dashboard = await service.getHomeDashboard(owner);
+
+    expect(dashboard).toEqual({
+      recentNotes: [],
+      openActions: [],
+      unresolvedQuestions: [],
+      upcoming: [],
+    });
+    expect(repository.search).toHaveBeenCalledTimes(3);
+    expect(repository.search).toHaveBeenCalledWith(
+      owner,
+      expect.objectContaining({ noteTypes: ["action"], status: "open", limit: 3 }),
+    );
+    expect(repository.search).toHaveBeenCalledWith(
+      owner,
+      expect.objectContaining({
+        noteTypes: ["question"],
+        status: "unresolved",
+        limit: 3,
+      }),
+    );
+    expect(repository.listUpcoming).toHaveBeenCalledWith(owner, 3);
   });
 
   it("renders organized results with meeting, status, and original access", () => {

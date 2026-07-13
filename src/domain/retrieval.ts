@@ -45,3 +45,19 @@ export interface NoteRetrievalResponse {
   request: NoteRetrievalRequest;
   notes: RetrievedNote[];
 }
+
+export interface DashboardUpcomingItem {
+  id: string;
+  kind: "reminder" | "resurfacing";
+  noteId: string | null;
+  text: string;
+  scheduledFor: Date;
+  meetingTitle: string | null;
+}
+
+export interface HomeDashboardData {
+  recentNotes: RetrievedNote[];
+  openActions: RetrievedNote[];
+  unresolvedQuestions: RetrievedNote[];
+  upcoming: DashboardUpcomingItem[];
+}
