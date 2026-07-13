@@ -25,6 +25,7 @@ interface SeedSnapshotRow extends QueryResultRow {
   note_count: string;
   meeting_count: string;
   ambiguous_candidate_count: string;
+  published_note_card_count: string;
   digest_status: string | null;
   digest_channel_id: string | null;
   resurfacing_status: string | null;
@@ -71,9 +72,12 @@ async function main(): Promise<void> {
     checks.push(failedCheck("Token encryption key", error));
   }
 
-  checks.push(identifierCheck("Demo workspace ID", demo.workspaceId, "T"));
-  checks.push(identifierCheck("Demo user ID", demo.userId, "U"));
-  checks.push(identifierCheck("Demo source channel", demo.sourceChannelId, "D"));
+  checks.push(
+    identifierCheck("Demo workspace ID", demo.workspaceId, /^T[A-Z0-9]+$/u, "T…"),
+  );
+  checks.push(
+    identifierCheck("Demo user ID", demo.userId, /^U[A-Z0-9]+$/u, "U…"),
+  );
 
   try {
     await pool.query("SELECT 1");
@@ -190,6 +194,18 @@ async function loadSeedSnapshot(
            AND n.source_message_ts = 'margin-demo-ambiguous-context'
        )::text AS ambiguous_candidate_count,
        (
+         SELECT COUNT(*)
+         FROM notes
+         WHERE workspace_id = $1
+           AND user_id = $2
+           AND source_message_ts IN (
+             'margin-demo-clear-context',
+             'margin-demo-ambiguous-context'
+           )
+           AND card_channel_id LIKE 'D%'
+           AND card_message_ts IS NOT NULL
+       )::text AS published_note_card_count,
+       (
          SELECT d.status
          FROM post_meeting_digests d
          JOIN meetings m
@@ -252,6 +268,7 @@ async function loadSeedSnapshot(
     noteCount: Number(row.note_count),
     meetingCount: Number(row.meeting_count),
     ambiguousCandidateCount: Number(row.ambiguous_candidate_count),
+    publishedNoteCardCount: Number(row.published_note_card_count),
     digestStatus: row.digest_status,
     digestChannelId: row.digest_channel_id,
     resurfacingStatus: row.resurfacing_status,
@@ -342,6 +359,22 @@ async function checkSlack(
               detail: `User ${userId} is missing, deleted, or a bot.`,
             },
       );
+
+      const opened = await client.conversations.open({ users: userId });
+      const channelId = opened.channel?.id;
+      checks.push(
+        channelId?.startsWith("D")
+          ? {
+              name: "Slack private DM",
+              status: "pass",
+              detail: `Margin can open owner DM ${channelId}.`,
+            }
+          : {
+              name: "Slack private DM",
+              status: "fail",
+              detail: "Margin could not open a private DM for the demo user.",
+            },
+      );
     }
   } catch (error) {
     checks.push(failedCheck("Slack authentication", error));
@@ -409,18 +442,19 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 function identifierCheck(
   name: string,
   value: string,
-  requiredPrefix: string,
+  pattern: RegExp,
+  expectedShape: string,
 ): PreflightCheck {
-  return value.startsWith(requiredPrefix)
+  return pattern.test(value)
     ? {
         name,
         status: "pass",
-        detail: `${value} has the expected ${requiredPrefix} prefix.`,
+        detail: `${value} has the expected Slack ID shape.`,
       }
     : {
         name,
         status: "fail",
-        detail: `${value} must begin with ${requiredPrefix}.`,
+        detail: `${value} must be a real Slack ID shaped like ${expectedShape}.`,
       };
 }
 
