@@ -197,9 +197,9 @@ function buildContextClarificationBlocks(
   const standalone = candidates.find(
     (item) => item.candidate.source === "standalone",
   );
-  const elements = rankedMeetings.map((item) => ({
+  const elements = rankedMeetings.map((item, index) => ({
     type: "button",
-    action_id: "margin_context_candidate_select",
+    action_id: `margin_context_candidate_select_${index}`,
     text: {
       type: "plain_text",
       text: truncatePlainText(item.meeting?.title ?? "Meeting", 70),
@@ -213,7 +213,7 @@ function buildContextClarificationBlocks(
   if (standalone) {
     elements.push({
       type: "button",
-      action_id: "margin_context_candidate_select",
+      action_id: "margin_context_candidate_select_none",
       text: { type: "plain_text", text: "No meeting" },
       value: JSON.stringify({
         noteId: standalone.candidate.noteId,

@@ -137,7 +137,7 @@ export function registerNoteCardActions(
   );
 
   app.action(
-    "margin_context_candidate_select",
+    /^margin_context_candidate_select(?:_.+)?$/,
     async ({ ack, body, action, client, logger }) => {
       await ack();
       try {
