@@ -2,6 +2,8 @@
 
 This is the operational checklist for the final sandbox rehearsal, video recording, and Devpost submission. It assumes the current `main` branch is deployed and the Slack app was created from `manifest.json`.
 
+**Deadline:** July 13, 2026 at 5:00 p.m. PDT / 8:00 p.m. EDT.
+
 ## 1. Freeze the revision
 
 1. Pull the latest `main`.
@@ -39,6 +41,9 @@ The repository URL, deployed revision, and video must describe the same implemen
    - `users:read`.
 6. Reinstall the app after any scope, event, or manifest change.
 7. Generate or confirm the `xapp-` Socket Mode token has `connections:write`.
+8. Invite both required testing accounts to the submitted sandbox:
+   - `slackhack@salesforce.com`;
+   - `testing@devpost.com`.
 
 `im:write` is required for `conversations.open`, which Margin uses for private digest, resurfacing, export, and deterministic demo delivery. Do not request `calls:read`. Margin does not read native huddle audio, transcripts, or participant history.
 
@@ -185,10 +190,15 @@ Reset, reseed, republish, and rerun preflight before the final take if rehearsal
 
 ## 9. Record the video
 
-The final recording should:
+The final recording must:
 
-- remain within the competition's stated duration;
-- show real Slack interaction rather than slides alone;
+- be **less than three minutes**;
+- show the project functioning in Slack on the device/platform for which it was built;
+- be uploaded publicly to **YouTube, Vimeo, Facebook Video, or Youku**;
+- avoid copyrighted music, third-party material without permission, confidential information, credentials, and unrelated private Slack content.
+
+It should also:
+
 - explain that Margin is not a transcript or recording bot;
 - show immutable original preservation;
 - show evidence-based context and one narrow clarification;
@@ -197,8 +207,6 @@ The final recording should:
 - use one customer-workflows narrative throughout;
 - identify prepared data as seeded;
 - end with the public repository and project name.
-
-Do not show environment files, tokens, OAuth codes, raw database credentials, or private unrelated Slack content.
 
 ## 10. Complete Devpost
 
@@ -209,10 +217,10 @@ Required final fields/assets:
 - project name and New Slack Agent track;
 - complete description of the implemented revision;
 - public GitHub repository;
-- public demonstration video;
+- public video URL from YouTube, Vimeo, Facebook Video, or Youku;
 - uploaded `docs/architecture-overview.svg` or a lossless export of it;
 - official Slack developer sandbox URL;
-- required judge/test accounts invited to the sandbox;
+- test access granted to `slackhack@salesforce.com` and `testing@devpost.com`;
 - Slack technologies clearly named;
 - third-party services and licenses credited.
 
@@ -223,10 +231,10 @@ Replace every bracketed placeholder in the submission copy.
 Before submitting:
 
 1. open the repository from a logged-out/private browser;
-2. open the video from a logged-out/private browser;
+2. open the video from a logged-out/private browser and verify it is shorter than three minutes;
 3. confirm the architecture image renders independently;
 4. confirm the sandbox URL is the correct workspace;
-5. confirm the judge accounts can access the sandbox;
+5. confirm both required testing accounts can access the sandbox;
 6. compare every Devpost claim with the deployed revision;
 7. submit and verify that Devpost shows the project as submitted rather than draft.
 
@@ -235,9 +243,10 @@ Before submitting:
 Do not submit until all of these are true:
 
 - `npm run preflight:live` has zero failures;
-- the final video is publicly viewable;
+- the final video is publicly viewable on an accepted platform;
 - the repository is publicly viewable;
-- the sandbox is accessible to judges;
+- both testing accounts have sandbox access;
 - all placeholders are removed;
 - seeded behavior is disclosed;
-- the final project is no longer only a Devpost draft.
+- the final project is no longer only a Devpost draft;
+- submission occurs before July 13, 2026 at 5:00 p.m. PDT / 8:00 p.m. EDT.
