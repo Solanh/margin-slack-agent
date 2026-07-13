@@ -9,6 +9,8 @@
 - [x] Idempotent private Slack demo publisher added
 - [x] Every prepared Slack card is visibly labeled as seeded
 - [x] Static and live submission preflight commands added
+- [x] Slack manifest includes `im:write` for private proactive delivery
+- [x] Manifest scope/event regression tests added
 - [x] Paste-ready Devpost copy added in `docs/DEVPOST_SUBMISSION.md`
 - [x] Upload-ready architecture graphic added in `docs/architecture-overview.svg`
 - [x] Three-minute demo script aligned with seeded scenarios
@@ -29,6 +31,7 @@
 
 ## Reliability
 
+- [ ] Latest manifest applied and app reinstalled after adding `im:write`
 - [ ] Slack retries are idempotent in the deployed sandbox
 - [ ] AI failure saves verbatim note in the deployed sandbox
 - [ ] Calendar failure saves standalone note in the deployed sandbox
@@ -52,7 +55,8 @@
 
 ## Video
 
-- [ ] Under three minutes
+- [ ] Shorter than three minutes
+- [ ] Publicly visible on YouTube, Vimeo, Facebook Video, or Youku
 - [ ] Shows real Slack interaction
 - [ ] Explains why this is not a transcript bot
 - [ ] Shows original preservation
@@ -62,18 +66,21 @@
 - [ ] Architecture appears briefly
 - [ ] Seeded or prepared behavior is explicitly identified
 - [ ] Audio and text are legible
+- [ ] Contains no credentials, confidential information, or unlicensed music/material
 
 ## Devpost
 
-- [ ] Correct track selected
+- [ ] New Slack Agent track selected
 - [ ] Public repository linked
-- [ ] Demonstration video linked
+- [ ] Public demonstration video linked
 - [ ] `docs/architecture-overview.svg` uploaded
 - [ ] Developer sandbox URL provided
-- [ ] Required judge accounts invited to the sandbox
+- [ ] `slackhack@salesforce.com` invited to the sandbox
+- [ ] `testing@devpost.com` invited to the sandbox
 - [ ] Required Slack technology clearly identified
 - [ ] Third-party services and licenses credited
 - [ ] Submission copy reviewed against deployed revision
 - [ ] All bracketed placeholders removed
-- [ ] Submission tested from a logged-out browser
-- [ ] Submitted before the official deadline
+- [ ] Repository and video tested from a logged-out/private browser
+- [ ] Submission status verified as submitted, not draft
+- [ ] Submitted before July 13, 2026 at 5:00 p.m. PDT / 8:00 p.m. EDT
