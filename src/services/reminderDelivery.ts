@@ -95,7 +95,6 @@ export class ReminderDeliveryService {
       channel: channelId,
       text: buildReminderDeliveryFallback(reminder),
       blocks: buildReminderDeliveryBlocks(reminder) as never,
-      client_msg_id: reminder.id,
     });
     if (!posted.ts) {
       throw new Error("reminder_message_timestamp_unavailable");
