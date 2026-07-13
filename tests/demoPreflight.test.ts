@@ -12,6 +12,7 @@ describe("submission preflight checks", () => {
       noteCount: 9,
       meetingCount: 6,
       ambiguousCandidateCount: 3,
+      publishedNoteCardCount: 2,
       digestStatus: "sent",
       digestChannelId: "D123",
       resurfacingStatus: "sent",
@@ -20,17 +21,18 @@ describe("submission preflight checks", () => {
 
     expect(summarizeChecks(checks)).toEqual({
       ready: true,
-      passed: 5,
+      passed: 6,
       warnings: 0,
       failed: 0,
     });
   });
 
-  it("warns while seeded deliveries are waiting for a worker", () => {
+  it("warns while seeded deliveries and fallback cards are waiting", () => {
     const checks = evaluateDemoSeed({
       noteCount: 10,
       meetingCount: 7,
       ambiguousCandidateCount: 3,
+      publishedNoteCardCount: 0,
       digestStatus: "pending",
       digestChannelId: null,
       resurfacingStatus: "processing",
@@ -40,7 +42,7 @@ describe("submission preflight checks", () => {
     expect(summarizeChecks(checks)).toEqual({
       ready: true,
       passed: 3,
-      warnings: 2,
+      warnings: 3,
       failed: 0,
     });
   });
@@ -50,6 +52,7 @@ describe("submission preflight checks", () => {
       noteCount: 2,
       meetingCount: 1,
       ambiguousCandidateCount: 0,
+      publishedNoteCardCount: 0,
       digestStatus: null,
       digestChannelId: null,
       resurfacingStatus: "sent",
@@ -59,7 +62,7 @@ describe("submission preflight checks", () => {
     expect(summarizeChecks(checks)).toEqual({
       ready: false,
       passed: 0,
-      warnings: 0,
+      warnings: 1,
       failed: 5,
     });
   });
