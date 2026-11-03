@@ -1,5 +1,6 @@
 import type { OwnerScope } from "../domain/note.js";
 import type {
+  HomeDashboardData,
   NoteRetrievalRequest,
   NoteRetrievalResponse,
   RetrievalStatusFilter,
@@ -91,9 +92,43 @@ export class NoteRetrievalService {
     };
   }
 
+  async getHomeDashboard(owner: OwnerScope): Promise<HomeDashboardData> {
+    const [recentNotes, openActions, unresolvedQuestions, upcoming] =
+      await Promise.all([
+        this.repository.search(owner, dashboardRequest([], "any")),
+        this.repository.search(owner, dashboardRequest(["action"], "open")),
+        this.repository.search(
+          owner,
+          dashboardRequest(["question"], "unresolved"),
+        ),
+        this.repository.listUpcoming(owner, 3),
+      ]);
+
+    return {
+      recentNotes,
+      openActions,
+      unresolvedQuestions,
+      upcoming,
+    };
+  }
+
   getOriginal(owner: OwnerScope, noteId: string) {
     return this.repository.getOriginal(owner, noteId);
   }
+}
+
+function dashboardRequest(
+  noteTypes: NoteRetrievalRequest["noteTypes"],
+  status: RetrievalStatusFilter,
+): NoteRetrievalRequest {
+  return {
+    originalText: "App Home dashboard",
+    searchText: null,
+    noteTypes,
+    priorities: [],
+    status,
+    limit: 3,
+  };
 }
 
 export function parseNoteRetrievalRequest(

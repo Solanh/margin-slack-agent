@@ -1,4 +1,5 @@
 import type { App } from "@slack/bolt";
+import type { HomeDashboardData } from "../domain/retrieval.js";
 import type { RawNoteCapturer } from "../services/captureRawNote.js";
 import type { ContextResolutionService } from "../services/contextResolution.js";
 import type { GoogleCalendarConnectionService } from "../services/googleCalendarOAuth.js";
@@ -10,6 +11,7 @@ import type {
 } from "../services/organizeNote.js";
 import type { SlackContextSignalService } from "../services/slackContextSignals.js";
 import type { UserDataControlService } from "../services/userDataControls.js";
+import type { UserDataSettings } from "../storage/userDataRepository.js";
 import {
   buildCaptureFailureAcknowledgement,
 } from "./views/captureAcknowledgement.js";
@@ -274,12 +276,28 @@ export function registerSlackListeners(
       const owner = workspaceId
         ? { workspaceId, userId: event.user }
         : null;
-      const [calendarConnected, dataSettings] = owner
-        ? await Promise.all([
-            dependencies.calendarConnections.isConnected(owner),
-            dependencies.userDataControls.getSettings(owner),
-          ])
-        : [false, undefined];
+      let calendarConnected = false;
+      let dataSettings: UserDataSettings | undefined;
+      let dashboard: HomeDashboardData | undefined;
+      let timeZone = "UTC";
+
+      if (owner) {
+        [calendarConnected, dataSettings] = await Promise.all([
+          dependencies.calendarConnections.isConnected(owner),
+          dependencies.userDataControls.getSettings(owner),
+        ]);
+        try {
+          dashboard = await dependencies.noteRetrieval.getHomeDashboard(owner);
+        } catch (error) {
+          logger.error("Unable to load private App Home dashboard", error);
+        }
+        try {
+          const response = await client.users.info({ user: event.user });
+          timeZone = response.user?.tz ?? "UTC";
+        } catch {
+          timeZone = "UTC";
+        }
+      }
 
       if (workspaceId && event.context) {
         await dependencies.slackContextSignals.recordAppContext(
@@ -297,6 +315,8 @@ export function registerSlackListeners(
           calendarAvailable: dependencies.calendarConnections.isAvailable(),
           calendarConnected,
           ...(dataSettings ? { dataSettings } : {}),
+          ...(dashboard ? { dashboard } : {}),
+          timeZone,
         }),
       });
     } catch (error) {

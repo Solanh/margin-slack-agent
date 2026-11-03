@@ -7,6 +7,7 @@ import {
   type OwnerScope,
 } from "../domain/note.js";
 import type {
+  DashboardUpcomingItem,
   NoteRetrievalRequest,
   RetrievedNote,
   RetrievedOriginalNote,
@@ -36,6 +37,15 @@ interface OriginalRow extends QueryResultRow {
   meeting_title: string | null;
   meeting_starts_at: Date | string | null;
   created_at: Date | string;
+}
+
+interface UpcomingRow extends QueryResultRow {
+  id: string;
+  kind: string;
+  note_id: string | null;
+  text: string;
+  scheduled_for: Date | string;
+  meeting_title: string | null;
 }
 
 const SEARCH_SQL = `
@@ -138,6 +148,54 @@ const GET_ORIGINAL_SQL = `
   LIMIT 1
 `;
 
+const LIST_UPCOMING_SQL = `
+  SELECT *
+  FROM (
+    SELECT
+      r.id,
+      'reminder'::text AS kind,
+      r.note_id,
+      COALESCE(NULLIF(BTRIM(n.organized_text), ''), 'Saved verbatim note') AS text,
+      r.scheduled_for,
+      m.title AS meeting_title
+    FROM reminders r
+    JOIN notes n
+      ON n.id = r.note_id
+     AND n.workspace_id = r.workspace_id
+     AND n.user_id = r.user_id
+    LEFT JOIN meetings m
+      ON m.id = n.meeting_id
+     AND m.workspace_id = n.workspace_id
+     AND m.user_id = n.user_id
+    WHERE r.workspace_id = $1
+      AND r.user_id = $2
+      AND r.status IN ('pending', 'snoozed')
+      AND r.scheduled_for IS NOT NULL
+      AND r.scheduled_for >= NOW()
+
+    UNION ALL
+
+    SELECT
+      p.id,
+      'resurfacing'::text AS kind,
+      NULL::uuid AS note_id,
+      'Review open notes before ' || upcoming.title AS text,
+      p.scheduled_for,
+      upcoming.title AS meeting_title
+    FROM pre_meeting_resurfacings p
+    JOIN meetings upcoming
+      ON upcoming.id = p.upcoming_meeting_id
+     AND upcoming.workspace_id = p.workspace_id
+     AND upcoming.user_id = p.user_id
+    WHERE p.workspace_id = $1
+      AND p.user_id = $2
+      AND p.status IN ('pending', 'snoozed')
+      AND p.scheduled_for >= NOW()
+  ) upcoming
+  ORDER BY scheduled_for ASC, id ASC
+  LIMIT $3
+`;
+
 export class PostgresNoteRetrievalRepository
   implements NoteRetrievalRepository
 {
@@ -198,6 +256,31 @@ export class PostgresNoteRetrievalRepository
       meetingStartsAt: this.optionalDate(row.meeting_starts_at),
       createdAt: this.toDate(row.created_at),
     };
+  }
+
+  async listUpcoming(
+    owner: OwnerScope,
+    limit: number,
+  ): Promise<DashboardUpcomingItem[]> {
+    const result = await this.pool.query<UpcomingRow>(LIST_UPCOMING_SQL, [
+      owner.workspaceId,
+      owner.userId,
+      limit,
+    ]);
+
+    return result.rows.map((row) => {
+      if (row.kind !== "reminder" && row.kind !== "resurfacing") {
+        throw new Error("Unexpected App Home upcoming item type");
+      }
+      return {
+        id: row.id,
+        kind: row.kind,
+        noteId: row.note_id,
+        text: row.text,
+        scheduledFor: this.toDate(row.scheduled_for),
+        meetingTitle: row.meeting_title,
+      };
+    });
   }
 
   private stringArray(value: unknown): string[] {
