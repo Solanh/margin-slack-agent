@@ -92,7 +92,7 @@ describe("note card", () => {
     expect(escapeSlackMrkdwn("<&>")).toBe("&lt;&amp;&gt;");
   });
 
-  it("renders all five standard controls in one updateable action block", () => {
+  it("renders all six standard controls in one updateable action block", () => {
     const blocks = buildNoteCardBlocks(cardData(), "UTC");
     const actions = blocks.find(
       (block) =>
@@ -105,6 +105,7 @@ describe("note card", () => {
 
     expect(actions.block_id).toContain(note.id);
     expect(actions.elements.map((element) => element.action_id)).toEqual([
+      "margin_note_status",
       "margin_note_edit",
       "margin_note_priority",
       "margin_note_reminder",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DisplayModeSchema,
+  NoteStatusSchema,
   PrioritySchema,
   type ContextCandidateWithMeeting,
   type OwnerScope,
@@ -80,6 +81,16 @@ export class NoteCardService {
       patch: {
         priority: PrioritySchema.parse(priority),
         removeInferredFields: ["priority"],
+      },
+    });
+  }
+
+  setStatus(owner: OwnerScope, noteId: string, status: unknown) {
+    return this.interactions.applyUserPatch({
+      ...owner,
+      noteId,
+      patch: {
+        status: NoteStatusSchema.parse(status),
       },
     });
   }

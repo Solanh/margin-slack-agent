@@ -58,6 +58,7 @@ export interface NoteCardReference {
 export interface UserNotePatch {
   organizedText?: string | undefined;
   priority?: Note["priority"] | undefined;
+  status?: Note["status"] | undefined;
   displayMode?: Note["displayMode"] | undefined;
   reminderIntent?: string | null | undefined;
   explicitDueAt?: Date | null | undefined;

@@ -61,14 +61,15 @@ const UPDATE_NOTE_SQL = `
   UPDATE notes
   SET organized_text = $4,
       priority = $5,
-      display_mode = $6,
-      reminder_intent = $7,
-      explicit_due_at = $8,
-      meeting_id = $9,
-      context_source = $10,
-      context_confidence = $11,
-      context_resolution_status = $12,
-      inferred_fields = $13
+      status = $6,
+      display_mode = $7,
+      reminder_intent = $8,
+      explicit_due_at = $9,
+      meeting_id = $10,
+      context_source = $11,
+      context_confidence = $12,
+      context_resolution_status = $13,
+      inferred_fields = $14
   WHERE id = $1
     AND workspace_id = $2
     AND user_id = $3
@@ -158,6 +159,7 @@ export class PostgresNoteInteractionRepository
           ? input.patch.organizedText
           : current.organized_text;
       const priority = input.patch.priority ?? current.priority;
+      const status = input.patch.status ?? current.status;
       const displayMode = input.patch.displayMode ?? current.display_mode;
       const reminderIntent =
         input.patch.reminderIntent !== undefined
@@ -189,6 +191,7 @@ export class PostgresNoteInteractionRepository
         input.userId,
         organizedText,
         priority,
+        status,
         displayMode,
         reminderIntent,
         explicitDueAt,
@@ -207,7 +210,7 @@ export class PostgresNoteInteractionRepository
         organizedText,
         current.note_type,
         priority,
-        current.status,
+        status,
         displayMode,
         reminderIntent,
         explicitDueAt,

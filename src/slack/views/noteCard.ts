@@ -119,6 +119,19 @@ export function buildNoteCardBlocks(
     elements: [
       {
         type: "button",
+        action_id: "margin_note_status",
+        text: {
+          type: "plain_text",
+          text: note.status === "resolved" ? "Reopen" : "Mark done",
+        },
+        ...(note.status === "open" ? { style: "primary" } : {}),
+        value: JSON.stringify({
+          noteId: note.id,
+          status: note.status === "resolved" ? "open" : "resolved",
+        }),
+      },
+      {
+        type: "button",
         action_id: "margin_note_edit",
         text: { type: "plain_text", text: "Edit" },
         value: note.id,
@@ -175,14 +188,15 @@ export function buildNoteCardBlocks(
 
 export function buildNoteCardFallbackText(data: NoteCardData): string {
   const { note } = data;
+  const statusPrefix = note.status === "resolved" ? "Done: " : "";
   const contextPrompt =
     note.contextResolutionStatus === "needs_clarification"
       ? "\n\nChoose the meeting context in Slack."
       : "";
   if (note.displayMode === "organized" && note.organizedText) {
-    return `${note.organizedText}\n\nOriginal preserved: ${note.rawText}${contextPrompt}`;
+    return `${statusPrefix}${note.organizedText}\n\nOriginal preserved: ${note.rawText}${contextPrompt}`;
   }
-  return `Note saved verbatim: ${note.rawText}${contextPrompt}`;
+  return `${statusPrefix}Note saved verbatim: ${note.rawText}${contextPrompt}`;
 }
 
 function buildContextClarificationBlocks(
@@ -239,12 +253,18 @@ function buildContextClarificationBlocks(
 }
 
 function buildHeader(note: Note): string {
+  const statusSuffix =
+    note.status === "resolved"
+      ? " · Done"
+      : note.status === "archived"
+        ? " · Archived"
+        : "";
   if (note.displayMode === "verbatim") {
-    return "Verbatim note";
+    return `Verbatim note${statusSuffix}`;
   }
 
   const type = note.noteType ? formatLabel(note.noteType) : "Private note";
-  return `${type} · ${formatPriority(note.priority)} priority`;
+  return `${type} · ${formatPriority(note.priority)} priority${statusSuffix}`;
 }
 
 function buildMetadataFields(
@@ -255,7 +275,7 @@ function buildMetadataFields(
   const typeValue = note.noteType
     ? `${formatLabel(note.noteType)} · ${fieldProvenance(note, "noteType")}`
     : "Not classified · Unresolved";
-  const priorityValue = `${formatPriority(note.priority)} · ${fieldProvenance(note, "priority")}`;
+  const priorityValue = `${formatLabel(note.priority)} · ${fieldProvenance(note, "priority")}`;
   const reminderValue = buildReminderValue(note, timeZone);
   const meetingValue = buildMeetingValue(note, meeting, timeZone);
 
