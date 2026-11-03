@@ -28,6 +28,20 @@
         }
       ]
     },
+    "shortcuts": [
+      {
+        "name": "Capture private note",
+        "type": "global",
+        "callback_id": "margin_capture_note",
+        "description": "Save a private Margin note from anywhere in Slack."
+      },
+      {
+        "name": "Save privately to Margin",
+        "type": "message",
+        "callback_id": "margin_save_message",
+        "description": "Deliberately save the selected message to your private Margin memory."
+      }
+    ],
     "bot_user": {
       "display_name": "margin",
       "always_online": false
@@ -38,6 +52,7 @@
       "bot": [
         "assistant:write",
         "chat:write",
+        "commands",
         "files:write",
         "im:history",
         "im:write",

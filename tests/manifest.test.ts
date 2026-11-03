@@ -3,6 +3,12 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 interface SlackManifest {
+  features?: {
+    shortcuts?: Array<{
+      callback_id?: string;
+      type?: string;
+    }>;
+  };
   oauth_config?: {
     scopes?: {
       bot?: string[];
@@ -30,6 +36,7 @@ describe("Slack manifest", () => {
       expect.arrayContaining([
         "assistant:write",
         "chat:write",
+        "commands",
         "files:write",
         "im:history",
         "im:write",
@@ -49,6 +56,24 @@ describe("Slack manifest", () => {
         "app_context_changed",
         "message.im",
         "user_huddle_changed",
+      ]),
+    );
+  });
+
+  it("declares global and message capture shortcuts", async () => {
+    const manifest = await loadManifest();
+    const shortcuts = manifest.features?.shortcuts ?? [];
+
+    expect(shortcuts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          callback_id: "margin_capture_note",
+          type: "global",
+        }),
+        expect.objectContaining({
+          callback_id: "margin_save_message",
+          type: "message",
+        }),
       ]),
     );
   });

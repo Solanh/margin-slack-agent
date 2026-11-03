@@ -10,6 +10,7 @@ import { registerNoteRetrievalActions } from "./noteRetrievalActions.js";
 import { registerNoteStatusActions } from "./noteStatusActions.js";
 import { registerPostMeetingDigestActions } from "./postMeetingDigestActions.js";
 import { registerPreMeetingResurfacingActions } from "./preMeetingResurfacingActions.js";
+import { registerCaptureShortcuts } from "./shortcutActions.js";
 import {
   registerSlackListeners,
   type SlackListenerDependencies,
@@ -71,6 +72,7 @@ export function createSlackApp(
   });
 
   registerSlackListeners(app, dependencies);
+  registerCaptureShortcuts(app, dependencies);
   registerNoteCardActions(app, dependencies.noteCards);
   registerNoteStatusActions(app, dependencies.noteCards);
   registerNoteRetrievalActions(app, dependencies.noteRetrieval);
